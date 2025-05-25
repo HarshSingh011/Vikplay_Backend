@@ -1,5 +1,4 @@
 import os
-import shutil
 from typing import List
 from fastapi import APIRouter, Depends, File, UploadFile, Form, HTTPException, status, Request
 from sqlalchemy.orm import Session
@@ -7,14 +6,12 @@ from database import get_db
 import models
 import schemas
 from uuid import uuid4
+from r2_utils import upload_file_to_r2
 
 router = APIRouter(
     prefix="/videos",
     tags=["videos"]
 )
-
-UPLOAD_DIR = "static/videos"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 @router.post("/", response_model=schemas.Video)
 async def upload_video(
@@ -24,34 +21,44 @@ async def upload_video(
     file: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
+    # Validate file type
     if not file.content_type.startswith("video/"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="File must be a video"
         )
     
+    # Create unique filename
     file_extension = os.path.splitext(file.filename)[1]
-    unique_filename = f"{uuid4()}{file_extension}"
-    file_path = os.path.join(UPLOAD_DIR, unique_filename)
+    unique_filename = f"videos/{uuid4()}{file_extension}"
     
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-    
-    base_url = str(request.base_url).rstrip('/')
-    file_url = f"{base_url}/static/videos/{unique_filename}"
-    
-    db_video = models.Video(
-        title=title,
-        description=description,
-        file_path=file_path,
-        file_url=file_url
-    )
-    
-    db.add(db_video)
-    db.commit()
-    db.refresh(db_video)
-    
-    return db_video
+    try:
+        # Upload to Cloudflare R2
+        file_url = await upload_file_to_r2(
+            file=file, 
+            filename=unique_filename,
+            content_type=file.content_type
+        )
+        
+        # Create DB entry
+        db_video = models.Video(
+            title=title,
+            description=description,
+            file_path=unique_filename,  # R2 key
+            file_url=file_url  # Full R2 URL
+        )
+        
+        db.add(db_video)
+        db.commit()
+        db.refresh(db_video)
+        
+        return db_video
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error uploading video: {str(e)}"
+        )
 
 @router.get("/", response_model=List[schemas.Video])
 def get_videos(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
