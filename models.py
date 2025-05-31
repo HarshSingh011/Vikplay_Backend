@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, DateTime
 from sqlalchemy.sql import func
-from database import Base  # Changed from relative import
+from database import Base
 
 class Video(Base):
     __tablename__ = "videos"

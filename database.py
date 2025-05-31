@@ -6,7 +6,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# PostgreSQL configuration
 DB_USER = os.getenv("DB_USER", "postgres")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "password")
 DB_HOST = os.getenv("DB_HOST", "localhost")
@@ -15,16 +14,11 @@ DB_NAME = os.getenv("DB_NAME", "videodb")
 
 SQLALCHEMY_DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
-# For SQLite (alternative for development)
-# SQLALCHEMY_DATABASE_URL = "sqlite:///./videos.db"
-# engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
-
 engine = create_engine(SQLALCHEMY_DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
 
-# Dependency to get DB session
 def get_db():
     db = SessionLocal()
     try:
