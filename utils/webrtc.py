@@ -8,13 +8,10 @@ from aiortc.contrib.media import MediaRelay
 
 logger = logging.getLogger("webrtc")
 
-# Media relay for broadcasting streams to multiple viewers
 relay = MediaRelay()
 
-# Store active peer connections
 peer_connections = {}
 
-# Store active broadcasters
 broadcasters = {}
 
 class StreamTrack(MediaStreamTrack):
@@ -59,7 +56,6 @@ async def create_broadcaster(broadcaster_id, stream_id):
         logger.info(f"Broadcaster {broadcaster_id} connection state: {pc.connectionState}")
         if pc.connectionState == "failed" or pc.connectionState == "closed":
             if broadcaster_id in broadcasters:
-                # Notify viewers the stream has ended
                 for viewer_id in broadcasters[broadcaster_id]["viewers"]:
                     if viewer_id in peer_connections:
                         await peer_connections[viewer_id].close()
@@ -81,7 +77,6 @@ async def create_viewer(viewer_id, broadcaster_id):
     pc = RTCPeerConnection()
     peer_connections[viewer_id] = pc
     
-    # Add broadcaster's tracks to viewer
     broadcaster_data = broadcasters[broadcaster_id]
     
     if "video" in broadcaster_data["tracks"]:
@@ -92,7 +87,6 @@ async def create_viewer(viewer_id, broadcaster_id):
         audio_track = broadcaster_data["tracks"]["audio"]
         pc.addTrack(audio_track)
     
-    # Add viewer to broadcaster's viewer list
     broadcaster_data["viewers"].add(viewer_id)
     
     @pc.on("connectionstatechange")
@@ -102,7 +96,6 @@ async def create_viewer(viewer_id, broadcaster_id):
             if viewer_id in peer_connections:
                 del peer_connections[viewer_id]
                 
-                # Remove viewer from broadcaster's viewer list
                 if broadcaster_id in broadcasters:
                     broadcasters[broadcaster_id]["viewers"].discard(viewer_id)
     

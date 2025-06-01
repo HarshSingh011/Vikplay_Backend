@@ -1,25 +1,22 @@
 import os
 import secrets
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status, Request, Form
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status, Request, Form, File, UploadFile
 from sqlalchemy.orm import Session
 from database import get_db
 import models
 from schemas import streaming as schemas
 from utils.websocket import ConnectionManager
 from r2_utils import upload_file_to_r2
+from utils.webrtc import get_viewer_count, get_active_broadcasters
 
 router = APIRouter(
     prefix="/streaming",
     tags=["streaming"]
 )
 
-# Initialize the connection manager
+# Initialize the connection manager for chat
 manager = ConnectionManager()
-
-# Directory for storing HLS stream segments
-STREAMS_DIR = "static/streams"
-os.makedirs(STREAMS_DIR, exist_ok=True)
 
 # Create a new stream
 @router.post("/streams", response_model=schemas.Stream)
@@ -61,9 +58,11 @@ async def get_streams(
     
     streams = query.order_by(models.Stream.created_at.desc()).offset(skip).limit(limit).all()
     
-    # Update viewer counts from WebSocket manager
+    # Update viewer counts from WebRTC
+    active_broadcasters = get_active_broadcasters()
     for stream in streams:
-        stream.viewer_count = manager.get_viewer_count(stream.id)
+        if stream.user_id in active_broadcasters:
+            stream.viewer_count = get_viewer_count(stream.user_id)
     
     return streams
 
@@ -77,27 +76,11 @@ async def get_stream(
     if not stream:
         raise HTTPException(status_code=404, detail="Stream not found")
     
-    # Update viewer count from WebSocket manager
-    stream.viewer_count = manager.get_viewer_count(stream.id)
+    # Update viewer count from WebRTC
+    if stream.user_id in get_active_broadcasters():
+        stream.viewer_count = get_viewer_count(stream.user_id)
     
     return stream
-
-# Update stream status (start/stop)
-@router.put("/streams/{stream_id}/status")
-async def update_stream_status(
-    stream_id: int,
-    is_live: bool,
-    db: Session = Depends(get_db)
-):
-    stream = db.query(models.Stream).filter(models.Stream.id == stream_id).first()
-    if not stream:
-        raise HTTPException(status_code=404, detail="Stream not found")
-    
-    stream.is_live = is_live
-    db.commit()
-    db.refresh(stream)
-    
-    return {"status": "success", "is_live": is_live}
 
 # Upload stream thumbnail
 @router.post("/streams/{stream_id}/thumbnail")
