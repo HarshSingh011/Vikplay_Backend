@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from routes import videos
+from routes import videos, streaming, webrtc
 from database import engine
 import models
 
@@ -20,6 +20,8 @@ app.add_middleware(
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 app.include_router(videos.router)
+app.include_router(streaming.router)
+app.include_router(webrtc.router)
 
 if __name__ == "__main__":
     import uvicorn
