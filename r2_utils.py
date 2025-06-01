@@ -41,3 +41,29 @@ async def upload_file_to_r2(file, filename, content_type):
         raise
     finally:
         await file.seek(0)
+
+async def cleanup_incomplete_uploads():
+    """Clean up incomplete multipart uploads in the R2 bucket"""
+    try:
+        # List all multipart uploads
+        response = s3_client.list_multipart_uploads(
+            Bucket=R2_BUCKET_NAME
+        )
+        
+        cleaned = 0
+        # Abort each multipart upload
+        if 'Uploads' in response:
+            for upload in response['Uploads']:
+                s3_client.abort_multipart_upload(
+                    Bucket=R2_BUCKET_NAME,
+                    Key=upload['Key'],
+                    UploadId=upload['UploadId']
+                )
+                cleaned += 1
+                print(f"Aborted multipart upload: {upload['Key']}")
+        
+        return {"message": f"Cleaned up {cleaned} incomplete uploads"}
+    
+    except Exception as e:
+        print(f"Error cleaning up bucket: {e}")
+        raise e
