@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
+from schemas.streaming import Stream, StreamCreate, StreamPublic, ChatMessage
 
 class VideoBase(BaseModel):
     title: str
@@ -15,4 +16,4 @@ class Video(VideoBase):
     created_at: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True  # Changed from orm_mode = True
