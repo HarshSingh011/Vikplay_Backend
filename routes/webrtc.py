@@ -137,3 +137,26 @@ async def end_stream(
         await pc.close()
     
     return {"status": "success"}
+
+
+@router.get("/test", tags=["webrtc"])
+async def test_webrtc_service():
+    """Test if WebRTC service is functioning properly"""
+    try:
+        from utils.webrtc import get_active_broadcasters, peer_connections
+        from aiortc import RTCPeerConnection
+        
+        pc = RTCPeerConnection()
+        await pc.close()
+        
+        return {
+            "status": "ok",
+            "message": "WebRTC service is running",
+            "active_broadcasters": len(get_active_broadcasters()),
+            "total_connections": len(peer_connections)
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"WebRTC service error: {str(e)}"
+        }

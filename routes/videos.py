@@ -4,9 +4,9 @@ from fastapi import APIRouter, Depends, File, UploadFile, Form, HTTPException, s
 from sqlalchemy.orm import Session
 from database import get_db
 import models
-import schemas
 from uuid import uuid4
-from r2_utils import upload_file_to_r2
+from schemas.schemas import VideoCreate, Video
+import schemas.schemas as schemas
 from r2_utils import upload_file_to_r2, cleanup_incomplete_uploads
 
 router = APIRouter(
