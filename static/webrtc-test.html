@@ -3,215 +3,689 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebRTC Test</title>
+    <title>WebRTC Live Streaming Test</title>
     <style>
+        * {
+            box-sizing: border-box;
+        }
+        
         body {
-            font-family: Arial, sans-serif;
-            max-width: 1200px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1400px;
             margin: 0 auto;
             padding: 20px;
-            background-color: #f5f5f5;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
         }
+        
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin: 0;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
         .container {
             background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            margin-bottom: 25px;
+            backdrop-filter: blur(10px);
         }
+        
         .status {
-            padding: 10px;
-            border-radius: 4px;
-            margin: 10px 0;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            font-weight: 500;
+            border-left: 4px solid;
         }
-        .status.success { background-color: #d4edda; color: #155724; }
-        .status.error { background-color: #f8d7da; color: #721c24; }
-        .status.info { background-color: #d1ecf1; color: #0c5460; }
+        
+        .status.success { 
+            background-color: #d4edda; 
+            color: #155724; 
+            border-color: #28a745;
+        }
+        
+        .status.error { 
+            background-color: #f8d7da; 
+            color: #721c24; 
+            border-color: #dc3545;
+        }
+        
+        .status.info { 
+            background-color: #d1ecf1; 
+            color: #0c5460; 
+            border-color: #17a2b8;
+        }
+        
+        .status.warning {
+            background-color: #fff3cd;
+            color: #856404;
+            border-color: #ffc107;
+        }
+        
         video {
             width: 100%;
-            max-width: 640px;
+            max-width: 100%;
             background: #000;
-            border-radius: 4px;
+            border-radius: 10px;
+            border: 3px solid #e9ecef;
+            margin: 10px 0;
         }
+        
+        .video-container {
+            position: relative;
+            margin: 15px 0;
+        }
+        
+        .video-overlay {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 12px;
+        }
+        
+        .video-stats {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 11px;
+            font-family: monospace;
+        }
+        
         button {
-            background-color: #007bff;
+            background: linear-gradient(135deg, #007bff, #0056b3);
             color: white;
             border: none;
-            padding: 10px 20px;
-            border-radius: 4px;
+            padding: 12px 24px;
+            border-radius: 8px;
             cursor: pointer;
             margin: 5px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            font-size: 14px;
         }
-        button:hover { background-color: #0056b3; }
-        button:disabled { background-color: #6c757d; cursor: not-allowed; }
-        .danger { background-color: #dc3545; }
-        .danger:hover { background-color: #c82333; }
-        input, textarea {
+        
+        button:hover { 
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,123,255,0.3);
+        }
+        
+        button:disabled { 
+            background: #6c757d; 
+            cursor: not-allowed; 
+            transform: none;
+            box-shadow: none;
+        }
+        
+        .btn-success { background: linear-gradient(135deg, #28a745, #20c997); }
+        .btn-danger { background: linear-gradient(135deg, #dc3545, #c82333); }
+        .btn-warning { background: linear-gradient(135deg, #ffc107, #fd7e14); }
+        .btn-info { background: linear-gradient(135deg, #17a2b8, #20c997); }
+        
+        input, textarea, select {
             width: 100%;
-            padding: 8px;
-            margin: 5px 0;
-            border: 1px solid #ddd;
-            border-radius: 4px;
+            padding: 12px;
+            margin: 8px 0;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s ease;
         }
+        
+        input:focus, textarea:focus, select:focus {
+            outline: none;
+            border-color: #007bff;
+            box-shadow: 0 0 0 3px rgba(0,123,255,0.1);
+        }
+        
+        .form-group {
+            margin: 15px 0;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #495057;
+        }
+        
         .grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 20px;
+            gap: 25px;
         }
+        
+        .connection-info {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            font-family: monospace;
+            font-size: 13px;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin: 15px 0;
+        }
+        
+        .stat-card {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            border: 2px solid #e9ecef;
+        }
+        
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #007bff;
+        }
+        
+        .stat-label {
+            font-size: 12px;
+            color: #6c757d;
+            margin-top: 5px;
+        }
+        
+        .logs {
+            background: #1e1e1e;
+            color: #fff;
+            padding: 15px;
+            border-radius: 8px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            margin: 15px 0;
+        }
+        
+        .log-entry {
+            margin: 2px 0;
+            padding: 2px 5px;
+            border-radius: 3px;
+        }
+        
+        .log-info { background: rgba(23, 162, 184, 0.2); }
+        .log-success { background: rgba(40, 167, 69, 0.2); }
+        .log-warning { background: rgba(255, 193, 7, 0.2); }
+        .log-error { background: rgba(220, 53, 69, 0.2); }
+        
         @media (max-width: 768px) {
             .grid { grid-template-columns: 1fr; }
+            .stats-grid { grid-template-columns: repeat(2, 1fr); }
+            .header h1 { font-size: 2em; }
+        }
+        
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        
+        .recording {
+            background: #dc3545 !important;
+        }
+        
+        .recording::before {
+            content: "🔴 ";
         }
     </style>
 </head>
 <body>
-    <h1>WebRTC Live Streaming Test</h1>
+    <div class="header">
+        <h1>🎥 WebRTC Live Streaming Test Platform</h1>
+        <p>Professional WebRTC Testing & Development Environment</p>
+    </div>
     
-    <!-- API Test Section -->
+    <!-- API Health Check -->
     <div class="container">
-        <h2>🧪 API Health Check</h2>
-        <button onclick="testAPI()">Test WebRTC API</button>
+        <h2>🔍 System Health & API Status</h2>
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value" id="apiStatus">-</div>
+                <div class="stat-label">API Status</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="activeBroadcasters">-</div>
+                <div class="stat-label">Active Broadcasters</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="totalConnections">-</div>
+                <div class="stat-label">Total Connections</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="systemUptime">-</div>
+                <div class="stat-label">Uptime</div>
+            </div>
+        </div>
+        <button onclick="testAPI()" class="btn-info">🔄 Refresh System Status</button>
         <div id="api-status"></div>
     </div>
 
-    <!-- Broadcaster Section -->
+    <!-- Main Testing Grid -->
     <div class="grid">
+        <!-- Broadcaster Section -->
         <div class="container">
-            <h2>📹 Broadcaster (Stream)</h2>
-            <div>
-                <label>Stream Title:</label>
-                <input type="text" id="streamTitle" value="Test Stream" />
+            <h2>📹 Broadcaster Control Panel</h2>
+            
+            <div class="form-group">
+                <label for="streamTitle">Stream Title *</label>
+                <input type="text" id="streamTitle" value="Live Stream Test" placeholder="Enter stream title" />
             </div>
-            <div>
-                <label>Description:</label>
-                <textarea id="streamDescription" rows="3">Testing WebRTC streaming functionality</textarea>
+            
+            <div class="form-group">
+                <label for="streamDescription">Description</label>
+                <textarea id="streamDescription" rows="3" placeholder="Describe your stream...">Testing WebRTC live streaming functionality with advanced controls</textarea>
             </div>
-            <div>
-                <label>User ID:</label>
-                <input type="number" id="userId" value="1" />
+            
+            <div class="form-group">
+                <label for="userId">Broadcaster ID *</label>
+                <input type="text" id="userId" value="broadcaster_001" placeholder="Enter your user ID" />
             </div>
-            <button onclick="createStream()">Create Stream</button>
-            <button onclick="startBroadcast()" id="startBroadcast" disabled>Start Broadcast</button>
-            <button onclick="stopBroadcast()" id="stopBroadcast" disabled class="danger">Stop Broadcast</button>
+            
+            <div class="form-group">
+                <label for="videoQuality">Video Quality</label>
+                <select id="videoQuality">
+                    <option value="720p">720p HD (1280x720)</option>
+                    <option value="480p">480p (854x480)</option>
+                    <option value="360p">360p (640x360)</option>
+                    <option value="1080p">1080p Full HD (1920x1080)</option>
+                </select>
+            </div>
+            
+            <div style="text-align: center; margin: 20px 0;">
+                <button onclick="createStream()" id="createStreamBtn">🚀 Create Stream</button>
+                <button onclick="startBroadcast()" id="startBroadcastBtn" class="btn-success" disabled>📡 Start Broadcasting</button>
+                <button onclick="stopBroadcast()" id="stopBroadcastBtn" class="btn-danger" disabled>⏹️ Stop Broadcasting</button>
+            </div>
             
             <div id="broadcast-status"></div>
-            <video id="localVideo" autoplay muted playsinline></video>
+            
+            <div class="video-container">
+                <video id="localVideo" autoplay muted playsinline></video>
+                <div class="video-overlay" id="localOverlay">Local Preview</div>
+                <div class="video-stats" id="localStats">Waiting for stream...</div>
+            </div>
+            
+            <div class="connection-info" id="broadcasterInfo" style="display: none;">
+                <strong>📊 Broadcasting Details:</strong><br>
+                <span id="streamDetails">No active stream</span>
+            </div>
         </div>
 
         <!-- Viewer Section -->
         <div class="container">
-            <h2>👁️ Viewer (Watch)</h2>
-            <div>
-                <label>Stream ID:</label>
-                <input type="number" id="streamId" value="" placeholder="Enter stream ID" />
+            <h2>👁️ Viewer Control Panel</h2>
+            
+            <div class="form-group">
+                <label for="streamId">Stream ID to Watch *</label>
+                <input type="number" id="streamId" placeholder="Enter stream ID from broadcaster" />
             </div>
-            <button onclick="startViewing()">Start Viewing</button>
-            <button onclick="stopViewing()" class="danger">Stop Viewing</button>
+            
+            <div class="form-group">
+                <label for="viewerName">Viewer Name</label>
+                <input type="text" id="viewerName" value="Viewer_001" placeholder="Enter your viewer name" />
+            </div>
+            
+            <div style="text-align: center; margin: 20px 0;">
+                <button onclick="refreshStreams()" class="btn-info">🔄 Refresh Available Streams</button>
+                <button onclick="startViewing()" id="startViewBtn" class="btn-success">▶️ Start Watching</button>
+                <button onclick="stopViewing()" id="stopViewBtn" class="btn-danger">⏸️ Stop Watching</button>
+            </div>
             
             <div id="viewer-status"></div>
-            <video id="remoteVideo" autoplay playsinline></video>
+            
+            <div class="video-container">
+                <video id="remoteVideo" autoplay playsinline controls></video>
+                <div class="video-overlay" id="remoteOverlay">Remote Stream</div>
+                <div class="video-stats" id="remoteStats">No stream connected</div>
+            </div>
+            
+            <div class="connection-info" id="viewerInfo" style="display: none;">
+                <strong>📊 Connection Details:</strong><br>
+                <span id="connectionDetails">No active connection</span>
+            </div>
         </div>
     </div>
 
-    <!-- Stream List -->
+    <!-- Available Streams -->
     <div class="container">
-        <h2>📺 Available Streams</h2>
-        <button onclick="loadStreams()">Refresh Streams</button>
-        <div id="streams-list"></div>
+        <h2>📺 Available Live Streams</h2>
+        <div style="text-align: center; margin: 15px 0;">
+            <button onclick="loadStreams()" class="btn-info">🔄 Refresh Stream List</button>
+            <button onclick="loadStreams(true)" class="btn-success">🔴 Live Streams Only</button>
+        </div>
+        <div id="streams-list">
+            <div class="status info">Click "Refresh Stream List" to load available streams</div>
+        </div>
     </div>
 
-    <script>
+    <!-- Advanced Controls & Logs -->
+    <div class="container">
+        <h2>🛠️ Advanced Controls & System Logs</h2>
+          <div style="text-align: center; margin: 15px 0;">
+            <button onclick="clearLogs()" class="btn-warning">🗑️ Clear Logs</button>
+            <button onclick="exportLogs()" class="btn-info">💾 Export Logs</button>
+            <button onclick="testConnectivity()" class="btn-info">🔍 Test Connectivity</button>
+            <button onclick="checkDebugStatus()" class="btn-info">🐛 Debug Status</button>
+            <button onclick="simulateError()" class="btn-warning">⚠️ Simulate Error</button>
+        </div>
+        
+        <div class="logs" id="systemLogs">
+            <div class="log-entry log-info">[SYSTEM] WebRTC Test Platform Initialized</div>
+            <div class="log-entry log-info">[SYSTEM] Ready for testing...</div>
+        </div>
+    </div>    <script>
         const API_BASE = 'http://127.0.0.1:8000';
-        let localStream = null;
-        let peerConnection = null;
-        let currentStreamId = null;
-        let streamKey = null;
-        let clientId = null;
+        
+        // Global state management
+        const appState = {
+            localStream: null,
+            peerConnection: null,
+            currentStreamId: null,
+            streamKey: null,
+            clientId: null,
+            isStreaming: false,
+            isViewing: false,
+            startTime: Date.now(),
+            stats: {
+                bytesReceived: 0,
+                bytesSent: 0,
+                packetsLost: 0
+            }
+        };
 
-        // Test API connectivity
-        async function testAPI() {
-            const statusDiv = document.getElementById('api-status');
-            try {
-                const response = await fetch(`${API_BASE}/webrtc/test`);
-                const data = await response.json();
-                statusDiv.innerHTML = `<div class="status success">
-                    ✅ API Status: ${data.status}<br>
-                    Message: ${data.message}<br>
-                    Active Broadcasters: ${data.active_broadcasters}<br>
-                    Total Connections: ${data.total_connections}
-                </div>`;
-            } catch (error) {
-                statusDiv.innerHTML = `<div class="status error">❌ API Error: ${error.message}</div>`;
+        // Logging system
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry log-${type}`;
+            logEntry.innerHTML = `[${timestamp}] ${message}`;
+            
+            const logsContainer = document.getElementById('systemLogs');
+            logsContainer.appendChild(logEntry);
+            logsContainer.scrollTop = logsContainer.scrollHeight;
+            
+            console.log(`[${type.toUpperCase()}] ${message}`);
+        }
+
+        // Enhanced status display
+        function showStatus(elementId, message, type = 'info', persistent = false) {
+            const element = document.getElementById(elementId);
+            const statusClass = type === 'success' ? 'success' : 
+                              type === 'error' ? 'error' : 
+                              type === 'warning' ? 'warning' : 'info';
+            
+            const icons = {
+                success: '✅',
+                error: '❌',
+                warning: '⚠️',
+                info: 'ℹ️'
+            };
+            
+            element.innerHTML = `<div class="status ${statusClass}">
+                ${icons[type]} ${message}
+            </div>`;
+            
+            if (!persistent) {
+                setTimeout(() => {
+                    if (element.innerHTML.includes(message)) {
+                        element.innerHTML = '';
+                    }
+                }, 5000);
             }
         }
 
-        // Create a new stream
-        async function createStream() {
-            const title = document.getElementById('streamTitle').value;
-            const description = document.getElementById('streamDescription').value;
-            const userId = document.getElementById('userId').value;
-            const statusDiv = document.getElementById('broadcast-status');
+        // API Testing with retries
+        async function testAPI() {
+            log('Testing API connectivity...', 'info');
+            
+            try {
+                const response = await fetch(`${API_BASE}/webrtc/test`, {
+                    timeout: 5000
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                
+                // Update stats
+                document.getElementById('apiStatus').textContent = data.status === 'ok' ? '🟢 OK' : '🔴 ERROR';
+                document.getElementById('activeBroadcasters').textContent = data.active_broadcasters || 0;
+                document.getElementById('totalConnections').textContent = data.total_connections || 0;
+                document.getElementById('systemUptime').textContent = Math.floor((Date.now() - appState.startTime) / 1000) + 's';
+                
+                showStatus('api-status', `API Status: ${data.status}. Message: ${data.message}. Active Broadcasters: ${data.active_broadcasters}. Total Connections: ${data.total_connections}`, 'success');
+                log(`API test successful: ${data.message}`, 'success');
+                
+            } catch (error) {
+                document.getElementById('apiStatus').textContent = '🔴 ERROR';
+                showStatus('api-status', `API Error: ${error.message}. Please check if the server is running on port 8000.`, 'error', true);
+                log(`API test failed: ${error.message}`, 'error');
+            }
+        }
 
+        // Enhanced stream creation with validation
+        async function createStream() {
+            const title = document.getElementById('streamTitle').value.trim();
+            const description = document.getElementById('streamDescription').value.trim();
+            const userId = document.getElementById('userId').value.trim();
+
+            // Validation
+            if (!title) {
+                showStatus('broadcast-status', 'Stream title is required', 'error');
+                return;
+            }
+            
+            if (!userId) {
+                showStatus('broadcast-status', 'User ID is required', 'error');
+                return;
+            }
+
+            log(`Creating stream: "${title}" for user ${userId}`, 'info');
+            
             try {
                 const response = await fetch(`${API_BASE}/streaming/streams`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
                     body: JSON.stringify({
                         title: title,
                         description: description,
-                        user_id: parseInt(userId)
+                        user_id: userId
                     })
                 });
 
-                if (response.ok) {
-                    const stream = await response.json();
-                    currentStreamId = stream.id;
-                    streamKey = stream.stream_key;
-                    document.getElementById('streamId').value = stream.id;
-                    
-                    statusDiv.innerHTML = `<div class="status success">
-                        ✅ Stream created!<br>
-                        ID: ${stream.id}<br>
-                        Key: ${stream.stream_key}
-                    </div>`;
-                    
-                    document.getElementById('startBroadcast').disabled = false;
-                } else {
-                    const error = await response.json();
-                    statusDiv.innerHTML = `<div class="status error">❌ Error: ${error.detail}</div>`;
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || `HTTP ${response.status}`);
                 }
+
+                const stream = await response.json();
+                appState.currentStreamId = stream.id;
+                appState.streamKey = stream.stream_key;
+                
+                document.getElementById('streamId').value = stream.id;
+                
+                // Show stream details
+                document.getElementById('streamDetails').innerHTML = `
+                    Stream ID: <strong>${stream.id}</strong><br>
+                    Title: <strong>${stream.title}</strong><br>
+                    User ID: <strong>${stream.user_id}</strong><br>
+                    Stream Key: <strong>${stream.stream_key}</strong><br>
+                    Created: <strong>${new Date(stream.created_at).toLocaleString()}</strong>
+                `;
+                document.getElementById('broadcasterInfo').style.display = 'block';
+                
+                showStatus('broadcast-status', `Stream created successfully! Stream ID: ${stream.id}`, 'success');
+                log(`Stream created successfully: ID ${stream.id}`, 'success');
+                
+                // Enable broadcast button
+                document.getElementById('startBroadcastBtn').disabled = false;
+                document.getElementById('createStreamBtn').textContent = '✅ Stream Created';
+                document.getElementById('createStreamBtn').disabled = true;
+                
             } catch (error) {
-                statusDiv.innerHTML = `<div class="status error">❌ Error: ${error.message}</div>`;
+                showStatus('broadcast-status', `Failed to create stream: ${error.message}`, 'error');
+                log(`Stream creation failed: ${error.message}`, 'error');
             }
         }
 
-        // Start broadcasting
-        async function startBroadcast() {
-            const statusDiv = document.getElementById('broadcast-status');
+        // Get video constraints based on quality selection
+        function getVideoConstraints() {
+            const quality = document.getElementById('videoQuality').value;
+            const constraints = {
+                '360p': { width: 640, height: 360, frameRate: 30 },
+                '480p': { width: 854, height: 480, frameRate: 30 },
+                '720p': { width: 1280, height: 720, frameRate: 30 },
+                '1080p': { width: 1920, height: 1080, frameRate: 30 }
+            };
             
+            return {
+                video: {
+                    ...constraints[quality],
+                    facingMode: 'user'
+                },
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    sampleRate: 44100
+                }
+            };
+        }
+
+        // Enhanced broadcasting with better error handling
+        async function startBroadcast() {
+            if (!appState.currentStreamId || !appState.streamKey) {
+                showStatus('broadcast-status', 'Please create a stream first', 'error');
+                return;
+            }
+
+            log('Initializing broadcast...', 'info');
+
             try {
-                // Get user media
-                localStream = await navigator.mediaDevices.getUserMedia({ 
-                    video: true, 
-                    audio: true 
+                // Get user media with specified constraints
+                const constraints = getVideoConstraints();
+                log(`Requesting media with constraints: ${JSON.stringify(constraints)}`, 'info');
+                  appState.localStream = await navigator.mediaDevices.getUserMedia(constraints);
+                log('User media obtained successfully', 'success');
+                
+                const localVideo = document.getElementById('localVideo');
+                localVideo.srcObject = appState.localStream;
+                
+                // Wait for video to start playing
+                localVideo.onloadedmetadata = () => {
+                    log('Local video metadata loaded', 'success');
+                    document.getElementById('localStats').textContent = 'Camera ready';
+                };
+                
+                localVideo.onplaying = () => {
+                    log('Local video started playing', 'success');
+                    document.getElementById('localStats').textContent = 'Setting up connection...';
+                };
+                
+                // Initially show as initializing
+                document.getElementById('localOverlay').textContent = 'Local Preview - INITIALIZING';
+                document.getElementById('localOverlay').classList.add('pulse');
+                document.getElementById('localStats').textContent = 'Getting camera...';
+
+                // Create peer connection with STUN servers
+                appState.peerConnection = new RTCPeerConnection({
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' },
+                        { urls: 'stun:stun2.l.google.com:19302' }
+                    ],
+                    iceCandidatePoolSize: 10
+                });                // Set up connection state monitoring
+                appState.peerConnection.onconnectionstatechange = () => {
+                    const state = appState.peerConnection.connectionState;
+                    log(`Connection state changed: ${state}`, state === 'connected' ? 'success' : 'info');
+                    
+                    if (state === 'connected') {
+                        // Update overlay to show LIVE
+                        document.getElementById('localOverlay').textContent = 'Local Preview - LIVE';
+                        document.getElementById('localOverlay').classList.add('recording');
+                        document.getElementById('localStats').textContent = 'Broadcasting LIVE';
+                        
+                        showStatus('broadcast-status', 'Broadcasting live!', 'success', true);
+                        startStatsMonitoring();
+                    } else if (state === 'connecting') {
+                        document.getElementById('localOverlay').textContent = 'Local Preview - CONNECTING';
+                        document.getElementById('localStats').textContent = 'Connecting to server...';
+                    } else if (state === 'failed' || state === 'disconnected') {
+                        document.getElementById('localOverlay').textContent = 'Local Preview - DISCONNECTED';
+                        document.getElementById('localOverlay').classList.remove('recording');
+                        showStatus('broadcast-status', 'Connection lost - attempting to reconnect...', 'warning');
+                    }
+                };
+
+                // Handle ICE candidates
+                appState.peerConnection.onicecandidate = async (event) => {
+                    if (event.candidate) {
+                        try {
+                            await fetch(`${API_BASE}/webrtc/ice-candidate`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    client_id: appState.clientId,
+                                    candidate: event.candidate.candidate,
+                                    sdpMid: event.candidate.sdpMid,
+                                    sdpMLineIndex: event.candidate.sdpMLineIndex
+                                })
+                            });
+                            log(`ICE candidate sent for broadcaster`, 'info');
+                        } catch (error) {
+                            log(`Failed to send ICE candidate: ${error.message}`, 'warning');
+                        }
+                    }
+                };
+
+                // Add tracks to peer connection
+                appState.localStream.getTracks().forEach(track => {
+                    appState.peerConnection.addTrack(track, appState.localStream);
+                    log(`Added ${track.kind} track to peer connection`, 'info');
                 });
-                document.getElementById('localVideo').srcObject = localStream;
 
-                // Create peer connection
-                peerConnection = new RTCPeerConnection({
-                    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+                // Create and send offer
+                const offer = await appState.peerConnection.createOffer({
+                    offerToReceiveAudio: false,
+                    offerToReceiveVideo: false
                 });
+                
+                await appState.peerConnection.setLocalDescription(offer);
 
-                // Add local stream to peer connection
-                localStream.getTracks().forEach(track => {
-                    peerConnection.addTrack(track, localStream);
-                });
-
-                // Create offer
-                const offer = await peerConnection.createOffer();
-                await peerConnection.setLocalDescription(offer);
-
-                // Generate client ID
-                clientId = 'broadcaster_' + Math.random().toString(36).substr(2, 9);
+                appState.clientId = 'broadcaster_' + Math.random().toString(36).substr(2, 12);
+                log(`Generated client ID: ${appState.clientId}`, 'info');
 
                 // Send offer to server
                 const response = await fetch(`${API_BASE}/webrtc/offer`, {
@@ -220,92 +694,217 @@
                     body: JSON.stringify({
                         sdp: offer.sdp,
                         type: offer.type,
-                        stream_id: currentStreamId,
-                        stream_key: streamKey,
-                        client_id: clientId,
+                        stream_id: appState.currentStreamId,
+                        stream_key: appState.streamKey,
+                        client_id: appState.clientId,
                         is_broadcaster: true
                     })
-                });
-
-                if (response.ok) {
-                    const answer = await response.json();
-                    await peerConnection.setRemoteDescription(answer);
-                    
-                    statusDiv.innerHTML = `<div class="status success">✅ Broadcasting started!</div>`;
-                    document.getElementById('startBroadcast').disabled = true;
-                    document.getElementById('stopBroadcast').disabled = false;
-                } else {
-                    const error = await response.json();
-                    statusDiv.innerHTML = `<div class="status error">❌ Broadcast Error: ${error.detail}</div>`;
+                });                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || `HTTP ${response.status}`);
                 }
+
+                const answer = await response.json();
+                log(`Received answer from server: ${answer.client_id}`, 'success');
+                
+                // Set remote description with the answer
+                await appState.peerConnection.setRemoteDescription(
+                    new RTCSessionDescription({
+                        sdp: answer.sdp,
+                        type: answer.type
+                    })
+                );
+                
+                appState.isStreaming = true;
+                log('Broadcasting WebRTC connection established!', 'success');
+                
+                // Update UI
+                document.getElementById('startBroadcastBtn').disabled = true;
+                document.getElementById('stopBroadcastBtn').disabled = false;
+                document.getElementById('createStreamBtn').disabled = true;
+                
+                log('Broadcasting started successfully!', 'success');
 
             } catch (error) {
-                statusDiv.innerHTML = `<div class="status error">❌ Error: ${error.message}</div>`;
+                showStatus('broadcast-status', `Broadcasting failed: ${error.message}`, 'error');
+                log(`Broadcasting failed: ${error.message}`, 'error');
+                await stopBroadcast();
             }
         }
 
-        // Stop broadcasting
-        async function stopBroadcast() {
-            if (peerConnection) {
-                peerConnection.close();
-                peerConnection = null;
-            }
+        // Statistics monitoring
+        function startStatsMonitoring() {
+            if (!appState.peerConnection) return;
             
-            if (localStream) {
-                localStream.getTracks().forEach(track => track.stop());
-                localStream = null;
-            }
-
-            // Notify server
-            if (currentStreamId && streamKey && clientId) {
-                try {
-                    await fetch(`${API_BASE}/webrtc/end-stream/${currentStreamId}`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            stream_key: streamKey,
-                            client_id: clientId
-                        })
-                    });
-                } catch (error) {
-                    console.error('Error ending stream:', error);
+            setInterval(async () => {
+                if (appState.peerConnection && appState.peerConnection.connectionState === 'connected') {
+                    try {
+                        const stats = await appState.peerConnection.getStats();
+                        let bytesSent = 0;
+                        let packetsLost = 0;
+                        
+                        stats.forEach(report => {
+                            if (report.type === 'outbound-rtp') {
+                                bytesSent += report.bytesSent || 0;
+                                packetsLost += report.packetsLost || 0;
+                            }
+                        });
+                        
+                        const localStats = document.getElementById('localStats');
+                        if (localStats) {
+                            localStats.innerHTML = `
+                                📊 Bytes Sent: ${formatBytes(bytesSent)}<br>
+                                📦 Packets Lost: ${packetsLost}<br>
+                                ⏱️ Uptime: ${Math.floor((Date.now() - appState.startTime) / 1000)}s
+                            `;
+                        }
+                    } catch (e) {
+                        // Ignore stats errors
+                    }
                 }
-            }
-
-            document.getElementById('localVideo').srcObject = null;
-            document.getElementById('broadcast-status').innerHTML = 
-                `<div class="status info">📴 Broadcast stopped</div>`;
-            document.getElementById('startBroadcast').disabled = false;
-            document.getElementById('stopBroadcast').disabled = true;
+            }, 2000);
         }
 
-        // Start viewing a stream
+        // Enhanced stop broadcast
+        async function stopBroadcast() {
+            log('Stopping broadcast...', 'info');
+            
+            try {
+                // Close peer connection
+                if (appState.peerConnection) {
+                    appState.peerConnection.close();
+                    appState.peerConnection = null;
+                }
+                
+                // Stop local stream
+                if (appState.localStream) {
+                    appState.localStream.getTracks().forEach(track => {
+                        track.stop();
+                        log(`Stopped ${track.kind} track`, 'info');
+                    });
+                    appState.localStream = null;
+                }                // Notify server
+                if (appState.currentStreamId && appState.streamKey && appState.clientId) {
+                    try {
+                        const response = await fetch(`${API_BASE}/webrtc/end-stream/${appState.currentStreamId}`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                stream_key: appState.streamKey,
+                                client_id: appState.clientId
+                            })
+                        });
+                        
+                        if (response.ok) {
+                            const result = await response.json();
+                            log(`Server notified of stream end: ${result.message}`, 'success');
+                        } else {
+                            const error = await response.json();
+                            log(`Error from server: ${error.detail}`, 'warning');
+                        }
+                    } catch (error) {
+                        log(`Error notifying server: ${error.message}`, 'warning');
+                    }
+                }
+
+                // Reset UI
+                const localVideo = document.getElementById('localVideo');
+                localVideo.srcObject = null;
+                
+                document.getElementById('localOverlay').textContent = 'Local Preview';
+                document.getElementById('localOverlay').classList.remove('pulse', 'recording');
+                document.getElementById('localStats').textContent = 'Stopped';
+                
+                showStatus('broadcast-status', 'Broadcast stopped successfully', 'info');
+                
+                // Reset buttons
+                document.getElementById('startBroadcastBtn').disabled = false;
+                document.getElementById('stopBroadcastBtn').disabled = true;
+                document.getElementById('createStreamBtn').disabled = false;
+                document.getElementById('createStreamBtn').textContent = '🚀 Create Stream';
+                
+                // Reset state
+                appState.isStreaming = false;
+                appState.currentStreamId = null;
+                appState.streamKey = null;
+                appState.clientId = null;
+                
+                document.getElementById('broadcasterInfo').style.display = 'none';
+                
+                log('Broadcast stopped successfully', 'success');
+
+            } catch (error) {
+                log(`Error stopping broadcast: ${error.message}`, 'error');
+            }
+        }
+
+        // Enhanced viewing functionality
         async function startViewing() {
             const streamId = document.getElementById('streamId').value;
-            const statusDiv = document.getElementById('viewer-status');
+            const viewerName = document.getElementById('viewerName').value.trim();
 
             if (!streamId) {
-                statusDiv.innerHTML = `<div class="status error">❌ Please enter a stream ID</div>`;
+                showStatus('viewer-status', 'Please enter a stream ID', 'error');
                 return;
             }
 
+            log(`Starting to view stream ${streamId} as ${viewerName}`, 'info');
+
             try {
                 // Create peer connection for viewer
-                peerConnection = new RTCPeerConnection({
-                    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+                appState.peerConnection = new RTCPeerConnection({
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' }
+                    ]
                 });
 
                 // Handle incoming stream
-                peerConnection.ontrack = (event) => {
-                    document.getElementById('remoteVideo').srcObject = event.streams[0];
+                appState.peerConnection.ontrack = (event) => {
+                    log('Received remote stream', 'success');
+                    const remoteVideo = document.getElementById('remoteVideo');
+                    remoteVideo.srcObject = event.streams[0];
+                    document.getElementById('remoteOverlay').textContent = `Watching Stream ${streamId}`;
+                    document.getElementById('remoteOverlay').classList.add('pulse');
+                };                // Monitor connection state
+                appState.peerConnection.onconnectionstatechange = () => {
+                    const state = appState.peerConnection.connectionState;
+                    log(`Viewer connection state: ${state}`, 'info');
+                    
+                    if (state === 'connected') {
+                        showStatus('viewer-status', 'Successfully connected to stream!', 'success', true);
+                        startViewerStatsMonitoring();
+                    } else if (state === 'failed') {
+                        showStatus('viewer-status', 'Connection failed', 'error');
+                    }
+                };
+
+                // Handle ICE candidates for viewer
+                appState.peerConnection.onicecandidate = async (event) => {
+                    if (event.candidate) {
+                        try {
+                            await fetch(`${API_BASE}/webrtc/ice-candidate`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    client_id: appState.clientId,
+                                    candidate: event.candidate.candidate,
+                                    sdpMid: event.candidate.sdpMid,
+                                    sdpMLineIndex: event.candidate.sdpMLineIndex
+                                })
+                            });
+                            log(`ICE candidate sent for viewer`, 'info');
+                        } catch (error) {
+                            log(`Failed to send ICE candidate: ${error.message}`, 'warning');
+                        }
+                    }
                 };
 
                 // Create offer
-                const offer = await peerConnection.createOffer();
-                await peerConnection.setLocalDescription(offer);
+                const offer = await appState.peerConnection.createOffer();
+                await appState.peerConnection.setLocalDescription(offer);
 
-                // Generate client ID
-                clientId = 'viewer_' + Math.random().toString(36).substr(2, 9);
+                appState.clientId = 'viewer_' + Math.random().toString(36).substr(2, 12);
 
                 // Send offer to server
                 const response = await fetch(`${API_BASE}/webrtc/offer`, {
@@ -315,70 +914,296 @@
                         sdp: offer.sdp,
                         type: offer.type,
                         stream_id: parseInt(streamId),
-                        client_id: clientId,
+                        client_id: appState.clientId,
                         is_broadcaster: false
                     })
-                });
-
-                if (response.ok) {
-                    const answer = await response.json();
-                    await peerConnection.setRemoteDescription(answer);
-                    statusDiv.innerHTML = `<div class="status success">✅ Connected to stream!</div>`;
-                } else {
-                    const error = await response.json();
-                    statusDiv.innerHTML = `<div class="status error">❌ Viewer Error: ${error.detail}</div>`;
+                });                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || `HTTP ${response.status}`);
                 }
 
+                const answer = await response.json();
+                log(`Received viewer answer from server: ${answer.client_id}`, 'success');
+                
+                // Set remote description with the answer
+                await appState.peerConnection.setRemoteDescription(
+                    new RTCSessionDescription({
+                        sdp: answer.sdp,
+                        type: answer.type
+                    })
+                );
+                
+                appState.isViewing = true;
+                log('Viewer WebRTC connection established!', 'success');
+                
+                appState.isViewing = true;
+                
+                // Update UI
+                document.getElementById('startViewBtn').disabled = true;
+                document.getElementById('stopViewBtn').disabled = false;
+                
+                // Show connection details
+                document.getElementById('connectionDetails').innerHTML = `
+                    Stream ID: <strong>${streamId}</strong><br>
+                    Viewer: <strong>${viewerName}</strong><br>
+                    Client ID: <strong>${appState.clientId}</strong><br>
+                    Connected: <strong>${new Date().toLocaleTimeString()}</strong>
+                `;
+                document.getElementById('viewerInfo').style.display = 'block';
+                
+                log(`Successfully connected to stream ${streamId}`, 'success');
+
             } catch (error) {
-                statusDiv.innerHTML = `<div class="status error">❌ Error: ${error.message}</div>`;
+                showStatus('viewer-status', `Failed to connect: ${error.message}`, 'error');
+                log(`Viewing failed: ${error.message}`, 'error');
+                await stopViewing();
             }
+        }
+
+        // Viewer statistics monitoring
+        function startViewerStatsMonitoring() {
+            setInterval(async () => {
+                if (appState.peerConnection && appState.peerConnection.connectionState === 'connected') {
+                    try {
+                        const stats = await appState.peerConnection.getStats();
+                        let bytesReceived = 0;
+                        let packetsLost = 0;
+                        
+                        stats.forEach(report => {
+                            if (report.type === 'inbound-rtp') {
+                                bytesReceived += report.bytesReceived || 0;
+                                packetsLost += report.packetsLost || 0;
+                            }
+                        });
+                        
+                        const remoteStats = document.getElementById('remoteStats');
+                        if (remoteStats) {
+                            remoteStats.innerHTML = `
+                                📥 Bytes Received: ${formatBytes(bytesReceived)}<br>
+                                📦 Packets Lost: ${packetsLost}<br>
+                                🔗 Quality: ${packetsLost < 10 ? 'Good' : 'Poor'}
+                            `;
+                        }
+                    } catch (e) {
+                        // Ignore stats errors
+                    }
+                }
+            }, 2000);
         }
 
         // Stop viewing
-        function stopViewing() {
-            if (peerConnection) {
-                peerConnection.close();
-                peerConnection = null;
+        async function stopViewing() {
+            log('Stopping viewer...', 'info');
+            
+            if (appState.peerConnection) {
+                appState.peerConnection.close();
+                appState.peerConnection = null;
             }
-            document.getElementById('remoteVideo').srcObject = null;
-            document.getElementById('viewer-status').innerHTML = 
-                `<div class="status info">📴 Stopped viewing</div>`;
+            
+            const remoteVideo = document.getElementById('remoteVideo');
+            remoteVideo.srcObject = null;
+            
+            document.getElementById('remoteOverlay').textContent = 'Remote Stream';
+            document.getElementById('remoteOverlay').classList.remove('pulse');
+            document.getElementById('remoteStats').textContent = 'Disconnected';
+            
+            showStatus('viewer-status', 'Stopped viewing', 'info');
+            
+            // Reset buttons
+            document.getElementById('startViewBtn').disabled = false;
+            document.getElementById('stopViewBtn').disabled = true;
+            
+            appState.isViewing = false;
+            appState.clientId = null;
+            
+            document.getElementById('viewerInfo').style.display = 'none';
+            
+            log('Viewing stopped', 'success');
         }
 
-        // Load available streams
-        async function loadStreams() {
+        // Load available streams with enhanced display
+        async function loadStreams(liveOnly = false) {
             const streamsDiv = document.getElementById('streams-list');
+            
             try {
-                const response = await fetch(`${API_BASE}/streaming/streams`);
+                log(`Loading streams (live only: ${liveOnly})...`, 'info');
+                
+                const url = `${API_BASE}/streaming/streams${liveOnly ? '?live_only=true' : ''}`;
+                const response = await fetch(url);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
                 const streams = await response.json();
                 
                 if (streams.length === 0) {
-                    streamsDiv.innerHTML = '<p>No streams available</p>';
+                    streamsDiv.innerHTML = `
+                        <div class="status info">
+                            ${liveOnly ? 'No live streams available' : 'No streams found'}. 
+                            ${liveOnly ? '' : 'Create a stream using the broadcaster panel above.'}
+                        </div>
+                    `;
                     return;
                 }
 
                 streamsDiv.innerHTML = streams.map(stream => `
-                    <div style="border: 1px solid #ddd; padding: 10px; margin: 10px 0; border-radius: 4px;">
-                        <h4>${stream.title}</h4>
-                        <p>${stream.description}</p>
-                        <p><strong>ID:</strong> ${stream.id} | 
-                           <strong>Live:</strong> ${stream.is_live ? '🔴 Yes' : '⚫ No'} | 
-                           <strong>Viewers:</strong> ${stream.viewer_count}</p>
-                        <button onclick="document.getElementById('streamId').value = ${stream.id}">
-                            Watch This Stream
-                        </button>
+                    <div style="border: 2px solid ${stream.is_live ? '#28a745' : '#e9ecef'}; 
+                         padding: 20px; margin: 15px 0; border-radius: 12px; 
+                         background: ${stream.is_live ? '#f8fff9' : '#f8f9fa'};">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                            <div style="flex: 1;">
+                                <h4 style="margin: 0 0 10px 0; color: #333;">
+                                    ${stream.is_live ? '🔴' : '⚫'} ${stream.title}
+                                </h4>
+                                <p style="margin: 5px 0; color: #666;">${stream.description || 'No description'}</p>
+                                <div style="font-size: 13px; color: #888; margin: 10px 0;">
+                                    <strong>Stream ID:</strong> ${stream.id} | 
+                                    <strong>Broadcaster:</strong> ${stream.user_id} | 
+                                    <strong>Status:</strong> ${stream.is_live ? 'LIVE' : 'Offline'} | 
+                                    <strong>Viewers:</strong> ${stream.viewer_count} |
+                                    <strong>Created:</strong> ${new Date(stream.created_at).toLocaleDateString()}
+                                </div>
+                            </div>
+                            <div style="margin-left: 20px;">
+                                <button onclick="document.getElementById('streamId').value = ${stream.id}; 
+                                        document.getElementById('streamId').focus();" 
+                                        class="btn-success" style="margin: 2px;">
+                                    📺 Select Stream
+                                </button>
+                                ${stream.is_live ? `
+                                    <button onclick="quickWatch(${stream.id})" 
+                                            class="btn-info" style="margin: 2px;">
+                                        ▶️ Quick Watch
+                                    </button>
+                                ` : ''}
+                            </div>
+                        </div>
                     </div>
                 `).join('');
+                
+                log(`Loaded ${streams.length} streams`, 'success');
+
             } catch (error) {
-                streamsDiv.innerHTML = `<div class="status error">❌ Error loading streams: ${error.message}</div>`;
+                streamsDiv.innerHTML = `
+                    <div class="status error">
+                        ❌ Error loading streams: ${error.message}
+                    </div>
+                `;
+                log(`Error loading streams: ${error.message}`, 'error');
             }
         }
 
-        // Auto-load on page load
-        window.onload = () => {
+        // Quick watch functionality
+        async function quickWatch(streamId) {
+            document.getElementById('streamId').value = streamId;
+            await startViewing();
+        }
+
+        // Refresh streams alias
+        function refreshStreams() {
+            loadStreams();
+        }
+
+        // Utility functions
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // Advanced testing functions
+        function clearLogs() {
+            document.getElementById('systemLogs').innerHTML = 
+                '<div class="log-entry log-info">[SYSTEM] Logs cleared</div>';
+            log('Logs cleared by user', 'info');
+        }
+
+        function exportLogs() {
+            const logs = document.getElementById('systemLogs').innerText;
+            const blob = new Blob([logs], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `webrtc-logs-${new Date().toISOString().slice(0, 19)}.txt`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            log('Logs exported successfully', 'success');
+        }
+
+        async function testConnectivity() {
+            log('Testing network connectivity...', 'info');
+            
+            const tests = [
+                { name: 'API Server', url: `${API_BASE}/webrtc/test` },
+                { name: 'STUN Server', url: 'stun:stun.l.google.com:19302' },
+                { name: 'Google DNS', url: 'https://8.8.8.8' }
+            ];
+            
+            for (const test of tests) {
+                try {
+                    if (test.url.startsWith('http')) {
+                        const response = await fetch(test.url, { mode: 'no-cors' });
+                        log(`✅ ${test.name}: Reachable`, 'success');
+                    } else {
+                        log(`🔍 ${test.name}: Testing via WebRTC...`, 'info');
+                    }
+                } catch (error) {
+                    log(`❌ ${test.name}: ${error.message}`, 'error');
+                }
+            }
+        }
+
+        async function checkDebugStatus() {
+            log('Checking WebRTC debug status...', 'info');
+            
+            try {
+                const response = await fetch(`${API_BASE}/webrtc/debug/status`);
+                const data = await response.json();
+                
+                if (data.status === 'ok') {
+                    log(`Debug Status: ${data.total_broadcasters} broadcasters, ${data.total_viewers} viewers`, 'success');
+                    log(`Broadcasters: ${JSON.stringify(data.broadcasters, null, 2)}`, 'info');
+                    log(`Client mappings: ${JSON.stringify(data.client_mappings, null, 2)}`, 'info');
+                } else {
+                    log(`Debug error: ${data.message}`, 'error');
+                }
+            } catch (error) {
+                log(`Failed to get debug status: ${error.message}`, 'error');
+            }
+        }
+
+        function simulateError() {
+            log('🧪 Simulating error for testing...', 'warning');
+            throw new Error('This is a simulated error for testing purposes');
+        }
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            if (appState.isStreaming) {
+                stopBroadcast();
+            }
+            if (appState.isViewing) {
+                stopViewing();
+            }
+        });
+
+        // Initialize application
+        window.addEventListener('load', () => {
+            log('WebRTC Test Platform loaded successfully', 'success');
             testAPI();
             loadStreams();
-        };
+            
+            // Auto-refresh streams every 30 seconds
+            setInterval(loadStreams, 30000);
+            
+            // Auto-refresh API status every 10 seconds
+            setInterval(testAPI, 10000);
+        });
     </script>
 </body>
 </html>

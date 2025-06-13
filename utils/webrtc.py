@@ -14,6 +14,9 @@ peer_connections = {}
 
 broadcasters = {}
 
+# Mapping from client_id to broadcaster_id
+client_broadcaster_mapping = {}
+
 class StreamTrack(MediaStreamTrack):
     """
     A video stream track that forwards frames from a broadcaster to viewers

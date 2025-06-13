@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Simple WebRTC Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        video { width: 300px; height: 200px; border: 1px solid #ccc; margin: 10px; }
+        button { padding: 10px 20px; margin: 5px; font-size: 16px; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        .logs { background: #f8f9fa; padding: 15px; margin: 10px 0; height: 200px; overflow-y: auto; font-family: monospace; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <h1>Simple WebRTC Streaming Test</h1>
+    
+    <div>
+        <h2>Step 1: Test Camera Access</h2>
+        <button onclick="testCamera()">Test Camera</button>
+        <video id="cameraTest" autoplay muted></video>
+        <div id="cameraStatus"></div>
+    </div>
+
+    <div>        <h2>Step 2: API Tests</h2>
+        <button onclick="testCreateStream()">Test Create Stream</button>
+        <button onclick="testWebRTCAPI()">Test WebRTC API</button>
+        <button onclick="testWebRTCOffer()">Test WebRTC Offer</button>
+        <div id="apiStatus"></div>
+    </div>
+
+    <div>
+        <h2>Step 3: WebRTC Broadcasting</h2>
+        <button onclick="startBasicBroadcast()">Start Basic Broadcast</button>
+        <button onclick="stopBasicBroadcast()">Stop Broadcast</button>
+        <video id="localVideo" autoplay muted></video>
+        <div id="broadcastStatus"></div>
+    </div>
+
+    <div>
+        <h2>Debug Logs</h2>
+        <button onclick="clearLogs()">Clear Logs</button>
+        <div id="logs" class="logs"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://127.0.0.1:8000';
+        let localStream = null;
+        let currentStreamId = null;
+        let streamKey = null;
+
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logDiv = document.getElementById('logs');
+            logDiv.innerHTML += `[${timestamp}] [${type.toUpperCase()}] ${message}<br>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(`[${type}] ${message}`);
+        }
+
+        function showStatus(elementId, message, type = 'info') {
+            const element = document.getElementById(elementId);
+            element.innerHTML = `<div class="status ${type}">${message}</div>`;
+        }
+
+        // Test 1: Camera Access
+        async function testCamera() {
+            log('Testing camera access...', 'info');
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: 640, height: 480 },
+                    audio: true
+                });
+                
+                document.getElementById('cameraTest').srcObject = stream;
+                showStatus('cameraStatus', '✅ Camera access successful!', 'success');
+                log('Camera access granted successfully', 'success');
+                
+                // Stop the test stream after 3 seconds
+                setTimeout(() => {
+                    stream.getTracks().forEach(track => track.stop());
+                    document.getElementById('cameraTest').srcObject = null;
+                    log('Camera test completed', 'info');
+                }, 3000);
+                
+            } catch (error) {
+                showStatus('cameraStatus', `❌ Camera error: ${error.message}`, 'error');
+                log(`Camera access failed: ${error.message}`, 'error');
+            }
+        }
+
+        // Test 2: Create Stream API
+        async function testCreateStream() {
+            log('Testing stream creation API...', 'info');
+            try {
+                const response = await fetch(`${API_BASE}/streaming/streams`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: 'Test Stream',
+                        description: 'Basic test stream',
+                        user_id: 'test_user_123'
+                    })
+                });
+
+                if (response.ok) {
+                    const stream = await response.json();
+                    currentStreamId = stream.id;
+                    streamKey = stream.stream_key;
+                    
+                    showStatus('apiStatus', `✅ Stream created! ID: ${stream.id}, Key: ${stream.stream_key}`, 'success');
+                    log(`Stream created successfully: ID=${stream.id}`, 'success');
+                } else {
+                    const error = await response.json();
+                    showStatus('apiStatus', `❌ Stream creation failed: ${error.detail}`, 'error');
+                    log(`Stream creation failed: ${error.detail}`, 'error');
+                }
+            } catch (error) {
+                showStatus('apiStatus', `❌ API Error: ${error.message}`, 'error');
+                log(`Stream creation API error: ${error.message}`, 'error');
+            }
+        }        // Test 3: WebRTC API
+        async function testWebRTCAPI() {
+            log('Testing WebRTC API...', 'info');
+            try {
+                const response = await fetch(`${API_BASE}/webrtc/test`);
+                const data = await response.json();
+                
+                showStatus('apiStatus', `✅ WebRTC API: ${data.status} - ${data.message}`, 'success');
+                log(`WebRTC API test successful: ${data.message}`, 'success');
+            } catch (error) {
+                showStatus('apiStatus', `❌ WebRTC API Error: ${error.message}`, 'error');
+                log(`WebRTC API test failed: ${error.message}`, 'error');
+            }
+        }
+
+        // Test 4: WebRTC Offer Test
+        async function testWebRTCOffer() {
+            log('Testing WebRTC offer endpoint...', 'info');
+            try {
+                const response = await fetch(`${API_BASE}/webrtc/test-offer`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    showStatus('apiStatus', `✅ WebRTC Offer Test: ${data.message}`, 'success');
+                    log(`WebRTC offer test successful: ${data.message}`, 'success');
+                    log(`Offer SDP length: ${data.offer_sdp_length}, Answer SDP length: ${data.answer_sdp_length}`, 'info');
+                } else {
+                    showStatus('apiStatus', `❌ WebRTC Offer Test Failed: ${data.message}`, 'error');
+                    log(`WebRTC offer test failed: ${data.message}`, 'error');
+                }
+            } catch (error) {
+                showStatus('apiStatus', `❌ WebRTC Offer Error: ${error.message}`, 'error');
+                log(`WebRTC offer test failed: ${error.message}`, 'error');
+            }
+        }
+
+        // Test 5: Basic Broadcasting (Simplified)
+        async function startBasicBroadcast() {
+            if (!currentStreamId || !streamKey) {
+                showStatus('broadcastStatus', '❌ Please create a stream first!', 'error');
+                return;
+            }
+
+            log('Starting basic broadcast test...', 'info');
+            
+            try {
+                // Step 1: Get camera
+                log('Step 1: Getting user media...', 'info');
+                localStream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: 640, height: 480 },
+                    audio: true
+                });
+                
+                document.getElementById('localVideo').srcObject = localStream;
+                log('Local video stream set successfully', 'success');
+
+                // Step 2: Create simple offer (without peer connection for now)
+                log('Step 2: Testing stream status update...', 'info');
+                
+                // Test if we can update stream status directly
+                const debugResponse = await fetch(`${API_BASE}/webrtc/debug/status`);
+                const debugData = await debugResponse.json();
+                log(`Current broadcasters: ${JSON.stringify(debugData.broadcasters)}`, 'info');
+
+                showStatus('broadcastStatus', '✅ Basic broadcast started (camera only)', 'success');
+                log('Basic broadcast test completed - camera stream active', 'success');
+
+            } catch (error) {
+                showStatus('broadcastStatus', `❌ Broadcast error: ${error.message}`, 'error');
+                log(`Basic broadcast failed: ${error.message}`, 'error');
+            }
+        }
+
+        // Stop broadcast
+        function stopBasicBroadcast() {
+            log('Stopping basic broadcast...', 'info');
+            
+            if (localStream) {
+                localStream.getTracks().forEach(track => {
+                    track.stop();
+                    log(`Stopped ${track.kind} track`, 'info');
+                });
+                localStream = null;
+            }
+            
+            document.getElementById('localVideo').srcObject = null;
+            showStatus('broadcastStatus', '📴 Broadcast stopped', 'info');
+            log('Basic broadcast stopped', 'info');
+        }
+
+        function clearLogs() {
+            document.getElementById('logs').innerHTML = '';
+        }
+
+        // Auto-run basic tests on load
+        window.onload = () => {
+            log('Simple WebRTC test page loaded', 'info');
+            testWebRTCAPI();
+        };
+    </script>
+</body>
+</html>
