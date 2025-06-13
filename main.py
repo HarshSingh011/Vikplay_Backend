@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from database import engine
-import models
+import models.models as models
 
 logging.basicConfig(level=logging.INFO)
 
@@ -21,7 +21,7 @@ app.add_middleware(
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# Import and include routers with error handling
+# Include routers AFTER app is defined
 from routes import videos
 app.include_router(videos.router)
 
@@ -36,8 +36,6 @@ try:
     from routes import webrtc
     app.include_router(webrtc.router)
     logging.info("WebRTC router loaded successfully")
-except ImportError:
-    logging.warning("WebRTC functionality not available - install aiortc package")
 except Exception as e:
     logging.error(f"Failed to load WebRTC router: {e}")
 
