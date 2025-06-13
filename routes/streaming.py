@@ -4,12 +4,11 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status, Request, Form, File, UploadFile
 from sqlalchemy.orm import Session
 from database import get_db
-import models
+import models.models as models
 import schemas.streaming as schemas
 from utils.websocket import ConnectionManager
 from r2_utils import upload_file_to_r2
 from utils.webrtc import get_viewer_count, get_active_broadcasters
-from schemas.schemas import StreamCreate, Stream, StreamPublic, ChatMessage
 
 router = APIRouter(
     prefix="/streaming",

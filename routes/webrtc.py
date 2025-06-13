@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, HTTPExce
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from database import get_db
-import models
+import models.models as models
 from utils.webrtc import create_broadcaster, create_viewer, get_viewer_count
 
 router = APIRouter(
