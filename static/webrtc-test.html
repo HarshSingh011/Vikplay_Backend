@@ -85,9 +85,8 @@
                 <label>Description:</label>
                 <textarea id="streamDescription" rows="3">Testing WebRTC streaming functionality</textarea>
             </div>
-            <div>
-                <label>User ID:</label>
-                <input type="number" id="userId" value="1" />
+            <div>                <label>User ID:</label>
+                <input type="text" id="userId" value="user_1" placeholder="Enter user ID" />
             </div>
             <button onclick="createStream()">Create Stream</button>
             <button onclick="startBroadcast()" id="startBroadcast" disabled>Start Broadcast</button>
@@ -142,23 +141,31 @@
             } catch (error) {
                 statusDiv.innerHTML = `<div class="status error">❌ API Error: ${error.message}</div>`;
             }
-        }
-
-        // Create a new stream
+        }        // Create a new stream
         async function createStream() {
             const title = document.getElementById('streamTitle').value;
             const description = document.getElementById('streamDescription').value;
             const userId = document.getElementById('userId').value;
             const statusDiv = document.getElementById('broadcast-status');
 
-            try {
-                const response = await fetch(`${API_BASE}/streaming/streams`, {
+            // Validate required fields
+            if (!title.trim()) {
+                statusDiv.innerHTML = `<div class="status error">❌ Error: Title is required</div>`;
+                return;
+            }
+            
+            if (!userId.trim()) {
+                statusDiv.innerHTML = `<div class="status error">❌ Error: User ID is required</div>`;
+                return;
+            }
+
+            try {const response = await fetch(`${API_BASE}/streaming/streams`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         title: title,
                         description: description,
-                        user_id: parseInt(userId)
+                        user_id: userId
                     })
                 });
 
@@ -225,10 +232,12 @@
                         client_id: clientId,
                         is_broadcaster: true
                     })
-                });
-
-                if (response.ok) {
-                    const answer = await response.json();
+                });                if (response.ok) {
+                    const responseData = await response.json();
+                    console.log('WebRTC Response:', responseData);
+                    // Extract the SDP from the response
+                    const answer = responseData.sdp;
+                    console.log('SDP Answer:', answer);
                     await peerConnection.setRemoteDescription(answer);
                     
                     statusDiv.innerHTML = `<div class="status success">✅ Broadcasting started!</div>`;
@@ -236,6 +245,7 @@
                     document.getElementById('stopBroadcast').disabled = false;
                 } else {
                     const error = await response.json();
+                    console.error('WebRTC Error:', error);
                     statusDiv.innerHTML = `<div class="status error">❌ Broadcast Error: ${error.detail}</div>`;
                 }
 
@@ -318,14 +328,17 @@
                         client_id: clientId,
                         is_broadcaster: false
                     })
-                });
-
-                if (response.ok) {
-                    const answer = await response.json();
+                });                if (response.ok) {
+                    const responseData = await response.json();
+                    console.log('Viewer WebRTC Response:', responseData);
+                    // Extract the SDP from the response
+                    const answer = responseData.sdp;
+                    console.log('Viewer SDP Answer:', answer);
                     await peerConnection.setRemoteDescription(answer);
                     statusDiv.innerHTML = `<div class="status success">✅ Connected to stream!</div>`;
                 } else {
                     const error = await response.json();
+                    console.error('Viewer WebRTC Error:', error);
                     statusDiv.innerHTML = `<div class="status error">❌ Viewer Error: ${error.detail}</div>`;
                 }
 

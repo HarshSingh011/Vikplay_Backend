@@ -89,11 +89,50 @@ def create_webrtc_answer(offer_sdp, is_broadcaster=False):
     fingerprint = ':'.join([f'{secrets.randbelow(256):02X}' for _ in range(32)])
     session_id = uuid.uuid4().int & 0x7FFFFFFF
     
-    # Create a basic but valid SDP answer
-    # Use proper \r\n line endings for WebRTC compatibility
+    # Create a basic but valid SDP answer with proper line endings
+    sdp_content = f"""v=0
+o=- {session_id} 2 IN IP4 127.0.0.1
+s=-
+t=0 0
+a=group:BUNDLE 0 1
+a=extmap-allow-mixed
+a=msid-semantic: WMS
+m=video 9 UDP/TLS/RTP/SAVPF 96
+c=IN IP4 0.0.0.0
+a=rtcp:9 IN IP4 0.0.0.0
+a=ice-ufrag:{ice_ufrag}
+a=ice-pwd:{ice_pwd}
+a=ice-options:trickle
+a=fingerprint:sha-256 {fingerprint}
+a=setup:active
+a=mid:0
+a=sendrecv
+a=rtcp-mux
+a=rtcp-rsize
+a=rtpmap:96 VP8/90000
+a=rtcp-fb:96 nack
+a=rtcp-fb:96 nack pli
+m=audio 9 UDP/TLS/RTP/SAVPF 111
+c=IN IP4 0.0.0.0
+a=rtcp:9 IN IP4 0.0.0.0
+a=ice-ufrag:{ice_ufrag}
+a=ice-pwd:{ice_pwd}
+a=ice-options:trickle
+a=fingerprint:sha-256 {fingerprint}
+a=setup:active
+a=mid:1
+a=sendrecv
+a=rtcp-mux
+a=rtpmap:111 opus/48000/2
+a=fmtp:111 minptime=10;useinbandfec=1
+"""
+    
+    # Convert to proper WebRTC format with \\r\\n line endings
+    formatted_sdp = sdp_content.replace('\n', '\\r\\n')
+    
     answer_sdp = {
         "type": "answer",
-        "sdp": f"v=0\r\no=- {session_id} 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\na=group:BUNDLE 0 1\r\na=extmap-allow-mixed\r\na=msid-semantic: WMS\r\nm=video 9 UDP/TLS/RTP/SAVPF 96\r\nc=IN IP4 0.0.0.0\r\na=rtcp:9 IN IP4 0.0.0.0\r\na=ice-ufrag:{ice_ufrag}\r\na=ice-pwd:{ice_pwd}\r\na=ice-options:trickle\r\na=fingerprint:sha-256 {fingerprint}\r\na=setup:active\r\na=mid:0\r\na=sendrecv\r\na=rtcp-mux\r\na=rtcp-rsize\r\na=rtpmap:96 VP8/90000\r\na=rtcp-fb:96 nack\r\na=rtcp-fb:96 nack pli\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\nc=IN IP4 0.0.0.0\r\na=rtcp:9 IN IP4 0.0.0.0\r\na=ice-ufrag:{ice_ufrag}\r\na=ice-pwd:{ice_pwd}\r\na=ice-options:trickle\r\na=fingerprint:sha-256 {fingerprint}\r\na=setup:active\r\na=mid:1\r\na=sendrecv\r\na=rtcp-mux\r\na=rtpmap:111 opus/48000/2\r\na=fmtp:111 minptime=10;useinbandfec=1\r\n"
+        "sdp": formatted_sdp
     }
     
     return answer_sdp
