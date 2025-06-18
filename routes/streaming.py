@@ -8,6 +8,7 @@ import models.models as models
 import schemas.streaming as schemas
 from utils.websocket import ConnectionManager
 from r2_utils import upload_file_to_r2
+# Import simplified webrtc functions
 from utils.webrtc import get_viewer_count, get_active_broadcasters
 
 router = APIRouter(
@@ -24,24 +25,34 @@ async def create_stream(
     stream: schemas.StreamCreate,
     db: Session = Depends(get_db)
 ):
-    # Generate a unique stream key
-    stream_key = secrets.token_urlsafe(16)
-    
-    # Create stream record
-    db_stream = models.Stream(
-        title=stream.title,
-        description=stream.description,
-        user_id=stream.user_id,
-        stream_key=stream_key,
-        is_live=False,
-        viewer_count=0
-    )
-    
-    db.add(db_stream)
-    db.commit()
-    db.refresh(db_stream)
-    
-    return db_stream
+    try:
+        # Log the incoming data for debugging
+        print(f"Creating stream with data: title='{stream.title}', description='{stream.description}', user_id='{stream.user_id}'")
+        
+        # Generate a unique stream key
+        stream_key = secrets.token_urlsafe(16)
+        
+        # Create stream record
+        db_stream = models.Stream(
+            title=stream.title,
+            description=stream.description,
+            user_id=stream.user_id,
+            stream_key=stream_key,
+            is_live=False,
+            viewer_count=0
+        )
+        
+        db.add(db_stream)
+        db.commit()
+        db.refresh(db_stream)
+        
+        print(f"Successfully created stream with ID: {db_stream.id}")
+        return db_stream
+        
+    except Exception as e:
+        print(f"Error creating stream: {str(e)}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to create stream: {str(e)}")
 
 # Get all active streams
 @router.get("/streams", response_model=List[schemas.StreamPublic])
@@ -58,11 +69,10 @@ async def get_streams(
     
     streams = query.order_by(models.Stream.created_at.desc()).offset(skip).limit(limit).all()
     
-    # Update viewer counts from WebRTC
+    # Update viewer counts from WebRTC    # Get active broadcasters
     active_broadcasters = get_active_broadcasters()
     for stream in streams:
-        if stream.user_id in active_broadcasters:
-            stream.viewer_count = get_viewer_count(stream.user_id)
+        if stream.user_id in active_broadcasters:            stream.viewer_count = get_viewer_count(stream.user_id)
     
     return streams
 
@@ -76,8 +86,7 @@ async def get_stream(
     if not stream:
         raise HTTPException(status_code=404, detail="Stream not found")
     
-    # Update viewer count from WebRTC
-    if stream.user_id in get_active_broadcasters():
+    # Update viewer count from WebRTC    if stream.user_id in get_active_broadcasters():
         stream.viewer_count = get_viewer_count(stream.user_id)
     
     return stream
@@ -196,3 +205,15 @@ async def websocket_chat_endpoint(
         # Update stream's viewer count in DB
         stream.viewer_count = manager.get_viewer_count(stream_id)
         db.commit()
+
+# Debug endpoint to test request format
+@router.post("/streams/debug")
+async def debug_create_stream(request: dict):
+    """Debug endpoint to see exactly what data is being sent"""
+    print(f"Raw request data: {request}")
+    print(f"Request type: {type(request)}")
+    
+    return {
+        "received_data": request,
+        "data_types": {key: type(value).__name__ for key, value in request.items()}
+    }

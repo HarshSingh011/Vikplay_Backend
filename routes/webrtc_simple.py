@@ -1,13 +1,10 @@
 import uuid
 import json
-import secrets
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, HTTPException, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from database import get_db
 import models.models as models
-# Import simplified webrtc functions
-from utils.webrtc import create_broadcaster, create_viewer, get_viewer_count, handle_offer, handle_ice_candidate
 
 router = APIRouter(
     prefix="/webrtc",
@@ -22,7 +19,7 @@ async def webrtc_test():
         "message": "WebRTC test endpoint is working",
         "supported_features": [
             "Basic WebRTC signaling",
-            "Stream management", 
+            "Stream management",
             "Connection testing"
         ]
     }
@@ -32,78 +29,42 @@ async def webrtc_offer(
     request: dict,
     db: Session = Depends(get_db)
 ):
-    """Handle WebRTC offer - improved version with proper SDP"""
+    """Handle WebRTC offer - simplified version"""
     
     # Extract data from request
     sdp = request.get("sdp")
-    offer_type = request.get("type", "offer")
+    type = request.get("type")
     stream_id = request.get("stream_id")
     client_id = request.get("client_id", str(uuid.uuid4()))
     is_broadcaster = request.get("is_broadcaster", False)
     
-    if not sdp or not stream_id:
-        raise HTTPException(status_code=400, detail="Missing required fields: sdp and stream_id")
+    if not sdp or not type or not stream_id:
+        raise HTTPException(status_code=400, detail="Missing required fields")
     
     # Get stream from database
     stream = db.query(models.Stream).filter(models.Stream.id == stream_id).first()
     if not stream:
         raise HTTPException(status_code=404, detail="Stream not found")
     
-    # Handle broadcaster authentication
-    if is_broadcaster:
-        stream_key = request.get("stream_key")
-        if not stream_key or stream.stream_key != stream_key:
-            raise HTTPException(status_code=403, detail="Invalid stream key")
-        
-        # Set stream to live when broadcaster connects
-        stream.is_live = True
-        db.commit()
-    
-    # Use the simplified webrtc handler
-    try:
-        result = await handle_offer(client_id, sdp, str(stream_id), is_broadcaster)
-        
-        if not result:
-            raise HTTPException(status_code=500, detail="Failed to create WebRTC connection")
-        
-        # Create a proper SDP answer response
-        answer_sdp = create_webrtc_answer(sdp, is_broadcaster)
-        
-        return {
-            "status": "success",
-            "client_id": client_id,
-            "stream_id": stream_id,
-            "is_broadcaster": is_broadcaster,
-            "sdp": answer_sdp
+    # Simplified response for now
+    return {
+        "status": "success",
+        "message": "WebRTC offer received",
+        "client_id": client_id,
+        "stream_id": stream_id,
+        "is_broadcaster": is_broadcaster,
+        "sdp": {
+            "type": "answer",
+            "sdp": "v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\n"  # Minimal SDP for testing
         }
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"WebRTC connection failed: {str(e)}")
-
-def create_webrtc_answer(offer_sdp, is_broadcaster=False):
-    """Create a proper WebRTC answer SDP"""
-    
-    # Generate random values for ICE credentials
-    ice_ufrag = secrets.token_hex(4)
-    ice_pwd = secrets.token_hex(12)
-    fingerprint = ':'.join([f'{secrets.randbelow(256):02X}' for _ in range(32)])
-    session_id = uuid.uuid4().int & 0x7FFFFFFF
-    
-    # Create a basic but valid SDP answer
-    # Use proper \r\n line endings for WebRTC compatibility
-    answer_sdp = {
-        "type": "answer",
-        "sdp": f"v=0\r\no=- {session_id} 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\na=group:BUNDLE 0 1\r\na=extmap-allow-mixed\r\na=msid-semantic: WMS\r\nm=video 9 UDP/TLS/RTP/SAVPF 96\r\nc=IN IP4 0.0.0.0\r\na=rtcp:9 IN IP4 0.0.0.0\r\na=ice-ufrag:{ice_ufrag}\r\na=ice-pwd:{ice_pwd}\r\na=ice-options:trickle\r\na=fingerprint:sha-256 {fingerprint}\r\na=setup:active\r\na=mid:0\r\na=sendrecv\r\na=rtcp-mux\r\na=rtcp-rsize\r\na=rtpmap:96 VP8/90000\r\na=rtcp-fb:96 nack\r\na=rtcp-fb:96 nack pli\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\nc=IN IP4 0.0.0.0\r\na=rtcp:9 IN IP4 0.0.0.0\r\na=ice-ufrag:{ice_ufrag}\r\na=ice-pwd:{ice_pwd}\r\na=ice-options:trickle\r\na=fingerprint:sha-256 {fingerprint}\r\na=setup:active\r\na=mid:1\r\na=sendrecv\r\na=rtcp-mux\r\na=rtpmap:111 opus/48000/2\r\na=fmtp:111 minptime=10;useinbandfec=1\r\n"
     }
-    
-    return answer_sdp
 
 @router.post("/answer")
 async def webrtc_answer(
     request: dict,
     db: Session = Depends(get_db)
 ):
-    """Handle WebRTC answer"""
+    """Handle WebRTC answer - simplified version"""
     
     sdp = request.get("sdp")
     client_id = request.get("client_id")
@@ -122,7 +83,7 @@ async def ice_candidate(
     request: dict,
     db: Session = Depends(get_db)
 ):
-    """Handle ICE candidate"""
+    """Handle ICE candidate - simplified version"""
     
     candidate = request.get("candidate")
     client_id = request.get("client_id")
@@ -130,14 +91,10 @@ async def ice_candidate(
     if not candidate or not client_id:
         raise HTTPException(status_code=400, detail="Missing required fields")
     
-    # Use the simplified ice candidate handler
-    result = await handle_ice_candidate(client_id, candidate)
-    
     return {
         "status": "success",
         "message": "ICE candidate received",
-        "client_id": client_id,
-        "result": result
+        "client_id": client_id
     }
 
 @router.websocket("/ws/{stream_id}")
@@ -178,7 +135,7 @@ async def get_stream_stats(
     
     return {
         "stream_id": stream_id,
-        "viewer_count": get_viewer_count(stream.user_id),
+        "viewer_count": stream.viewer_count or 0,
         "is_live": stream.is_live,
         "title": stream.title,
         "description": stream.description,
@@ -187,13 +144,11 @@ async def get_stream_stats(
 
 @router.post("/streams/{stream_id}/start")
 async def start_stream(
-    request: dict,
     stream_id: int,
+    stream_key: str,
     db: Session = Depends(get_db)
 ):
     """Start a stream"""
-    
-    stream_key = request.get("stream_key")
     
     stream = db.query(models.Stream).filter(models.Stream.id == stream_id).first()
     if not stream:
@@ -214,13 +169,11 @@ async def start_stream(
 
 @router.post("/streams/{stream_id}/stop")
 async def stop_stream(
-    request: dict,
     stream_id: int,
+    stream_key: str,
     db: Session = Depends(get_db)
 ):
     """Stop a stream"""
-    
-    stream_key = request.get("stream_key")
     
     stream = db.query(models.Stream).filter(models.Stream.id == stream_id).first()
     if not stream:
