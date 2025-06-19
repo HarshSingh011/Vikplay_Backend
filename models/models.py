@@ -3,6 +3,9 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
 
+# Import auth models
+from auth.models import User, OTP
+
 class Category(Base):
     __tablename__ = "categories"
 

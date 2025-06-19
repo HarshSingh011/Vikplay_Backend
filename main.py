@@ -25,6 +25,14 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 from routes import videos
 app.include_router(videos.router)
 
+# Include authentication routes
+try:
+    from auth import routes as auth_routes
+    app.include_router(auth_routes.router)
+    logging.info("Auth router loaded successfully")
+except Exception as e:
+    logging.error(f"Failed to load auth router: {e}")
+
 try:
     from routes import streaming
     app.include_router(streaming.router)
