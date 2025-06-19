@@ -236,3 +236,12 @@ class UserUtils:
             db.commit()
             return True
         return False
+
+# Export utility classes
+__all__ = [
+    "PasswordUtils",
+    "JWTUtils", 
+    "OTPUtils",
+    "EmailUtils",
+    "UserUtils"
+]

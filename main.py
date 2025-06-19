@@ -4,9 +4,11 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from database import engine
 import models.models as models
+import auth.models as auth_models  # Import auth models to register them
 
 logging.basicConfig(level=logging.INFO)
 
+# Create all tables including auth tables
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Video Server API")
@@ -27,8 +29,8 @@ app.include_router(videos.router)
 
 # Include authentication routes
 try:
-    from auth import routes as auth_routes
-    app.include_router(auth_routes.router)
+    from auth import router as auth_router
+    app.include_router(auth_router)
     logging.info("Auth router loaded successfully")
 except Exception as e:
     logging.error(f"Failed to load auth router: {e}")
