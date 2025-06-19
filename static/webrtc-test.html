@@ -84,11 +84,16 @@
             <div>
                 <label>Description:</label>
                 <textarea id="streamDescription" rows="3">Testing WebRTC streaming functionality</textarea>
+            </div>            <div>
+                <label>User ID:</label>
+                <input type="text" id="userId" value="test_user" placeholder="Enter user ID" />
             </div>
-            <div>                <label>User ID:</label>
-                <input type="text" id="userId" value="user_1" placeholder="Enter user ID" />
+            <div>
+                <label>Use existing stream ID 1:</label>
+                <input type="checkbox" id="useExistingStream" onchange="toggleStreamCreation()" checked />
             </div>
-            <button onclick="createStream()">Create Stream</button>
+            <button onclick="createStream()" id="createStreamBtn" style="display:none;">Create Stream</button>
+            <button onclick="useExistingStream()" id="useExistingBtn">Use Stream ID 1</button>
             <button onclick="startBroadcast()" id="startBroadcast" disabled>Start Broadcast</button>
             <button onclick="stopBroadcast()" id="stopBroadcast" disabled class="danger">Stop Broadcast</button>
             
@@ -98,10 +103,9 @@
 
         <!-- Viewer Section -->
         <div class="container">
-            <h2>👁️ Viewer (Watch)</h2>
-            <div>
+            <h2>👁️ Viewer (Watch)</h2>            <div>
                 <label>Stream ID:</label>
-                <input type="number" id="streamId" value="" placeholder="Enter stream ID" />
+                <input type="number" id="streamId" value="1" placeholder="Enter stream ID" />
             </div>
             <button onclick="startViewing()">Start Viewing</button>
             <button onclick="stopViewing()" class="danger">Stop Viewing</button>
@@ -118,13 +122,23 @@
         <div id="streams-list"></div>
     </div>
 
-    <script>
+    <!-- Debug Section -->
+    <div class="container">
+        <h2>🔧 Debug Tools</h2>
+        <button onclick="debugSDP()">Test SDP Parsing</button>
+        <div id="debug-status"></div>
+    </div>
+
+    <script>        // WebRTC and WebSocket variables
         const API_BASE = 'http://127.0.0.1:8000';
+        const WS_BASE = 'ws://127.0.0.1:8000';
         let localStream = null;
         let peerConnection = null;
         let currentStreamId = null;
         let streamKey = null;
         let clientId = null;
+        let signalingSocket = null;
+        let isViewerMode = false;
 
         // Test API connectivity
         async function testAPI() {
@@ -235,10 +249,16 @@
                 });                if (response.ok) {
                     const responseData = await response.json();
                     console.log('WebRTC Response:', responseData);
-                    // Extract the SDP from the response
+                    // Use the SDP answer object directly (it already has type and sdp fields)
                     const answer = responseData.sdp;
                     console.log('SDP Answer:', answer);
-                    await peerConnection.setRemoteDescription(answer);
+                    
+                    // Validate the answer object has required fields
+                    if (!answer || !answer.type || !answer.sdp) {
+                        throw new Error('Invalid SDP answer format received from server');
+                    }
+                    
+                    await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
                     
                     statusDiv.innerHTML = `<div class="status success">✅ Broadcasting started!</div>`;
                     document.getElementById('startBroadcast').disabled = true;
@@ -250,6 +270,7 @@
                 }
 
             } catch (error) {
+                console.error('Broadcast Error:', error);
                 statusDiv.innerHTML = `<div class="status error">❌ Error: ${error.message}</div>`;
             }
         }
@@ -331,10 +352,16 @@
                 });                if (response.ok) {
                     const responseData = await response.json();
                     console.log('Viewer WebRTC Response:', responseData);
-                    // Extract the SDP from the response
+                    // Use the SDP answer object directly (it already has type and sdp fields)
                     const answer = responseData.sdp;
                     console.log('Viewer SDP Answer:', answer);
-                    await peerConnection.setRemoteDescription(answer);
+                    
+                    // Validate the answer object has required fields
+                    if (!answer || !answer.type || !answer.sdp) {
+                        throw new Error('Invalid SDP answer format received from server');
+                    }
+                    
+                    await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
                     statusDiv.innerHTML = `<div class="status success">✅ Connected to stream!</div>`;
                 } else {
                     const error = await response.json();
@@ -343,6 +370,7 @@
                 }
 
             } catch (error) {
+                console.error('Viewer Error:', error);
                 statusDiv.innerHTML = `<div class="status error">❌ Error: ${error.message}</div>`;
             }
         }
@@ -384,6 +412,101 @@
                 `).join('');
             } catch (error) {
                 streamsDiv.innerHTML = `<div class="status error">❌ Error loading streams: ${error.message}</div>`;
+            }
+        }
+
+        // Debug function to test SDP parsing
+        async function debugSDP() {
+            try {
+                // Create a test peer connection to get a real offer
+                const testPc = new RTCPeerConnection({
+                    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+                });
+                
+                // Add a fake stream to get media sections
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                stream.getTracks().forEach(track => {
+                    testPc.addTrack(track, stream);
+                });
+                
+                const offer = await testPc.createOffer();
+                
+                console.log('Generated offer SDP:', offer.sdp);
+                
+                // Send to debug endpoint
+                const response = await fetch(`${API_BASE}/webrtc/debug/analyze-sdp`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        sdp: offer.sdp
+                    })
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('SDP Analysis:', data);
+                    document.getElementById('debug-status').innerHTML = `
+                        <div class="status success">
+                            <h4>✅ SDP Analysis Complete</h4>
+                            <p><strong>Offer sections:</strong> ${data.offer_analysis.total_sections}</p>
+                            <p><strong>Answer sections:</strong> ${data.answer_analysis.total_sections}</p>
+                            <details>
+                                <summary>View Details</summary>
+                                <pre>${JSON.stringify(data, null, 2)}</pre>
+                            </details>
+                        </div>
+                    `;
+                } else {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                // Clean up
+                stream.getTracks().forEach(track => track.stop());
+                testPc.close();
+                
+            } catch (error) {
+                console.error('SDP Debug error:', error);
+                document.getElementById('debug-status').innerHTML = `
+                    <div class="status error">❌ SDP Debug failed: ${error.message}</div>
+                `;
+            }
+        }
+
+        function toggleStreamCreation() {
+            const useExisting = document.getElementById('useExistingStream').checked;
+            const createBtn = document.getElementById('createStreamBtn');
+            const useExistingBtn = document.getElementById('useExistingBtn');
+            
+            if (useExisting) {
+                createBtn.style.display = 'none';
+                useExistingBtn.style.display = 'inline-block';
+            } else {
+                createBtn.style.display = 'inline-block';
+                useExistingBtn.style.display = 'none';
+            }
+        }
+
+        async function useExistingStream() {
+            const statusDiv = document.getElementById('broadcast-status');
+            
+            try {
+                // Use the existing stream ID 1
+                currentStreamId = 1;
+                streamKey = "e6HwdXju1utlkfqB29ZGlA"; // Known stream key for ID 1
+                
+                statusDiv.innerHTML = `<div class="status success">
+                    ✅ Using existing stream!<br>
+                    ID: 1<br>
+                    Key: ${streamKey}<br>
+                    Ready to broadcast!
+                </div>`;
+                
+                document.getElementById('startBroadcast').disabled = false;
+                document.getElementById('useExistingBtn').disabled = true;
+                
+            } catch (error) {
+                console.error('Error using existing stream:', error);
+                statusDiv.innerHTML = `<div class="status error">❌ Error: ${error.message}</div>`;
             }
         }
 
