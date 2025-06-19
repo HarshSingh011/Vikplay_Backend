@@ -32,6 +32,9 @@ class UserCreate(UserBase):
             raise ValueError('Username must contain only alphanumeric characters')
         return v
 
+# Alias for backward compatibility and clarity
+UserRegister = UserCreate
+
 class UserLogin(BaseModel):
     email: EmailStr
     password: str
