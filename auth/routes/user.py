@@ -6,7 +6,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from database import get_db
 from auth.schemas import UserResponse
-from auth.utils import UserUtils, JWTUtils
+from auth.services import get_user_service
 import logging
 
 logger = logging.getLogger(__name__)
@@ -26,30 +26,19 @@ async def get_current_user(
     Get current authenticated user information
     """
     try:
-        # Verify token
-        payload = JWTUtils.verify_token(credentials.credentials)
-        if payload is None:
+        user_service = get_user_service(db)
+        
+        # Get user by token
+        result = user_service.get_user_by_token(credentials.credentials)
+        
+        if not result.success:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid authentication token"
+                detail=result.message,
+                headers={"WWW-Authenticate": "Bearer"}
             )
         
-        # Get user
-        user_email = payload.get("sub")
-        if user_email is None:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid authentication token"
-            )
-        
-        user = UserUtils.get_user_by_email(db, user_email)
-        if user is None:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="User not found"
-            )
-        
-        return UserResponse.from_orm(user)
+        return UserResponse.from_orm(result.data)
         
     except HTTPException:
         raise

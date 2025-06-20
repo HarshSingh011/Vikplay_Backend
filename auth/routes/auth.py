@@ -8,9 +8,7 @@ from auth.schemas import (
     UserCreate, UserLogin, UserResponse, OTPVerify, 
     TokenResponse, MessageResponse
 )
-from auth.utils import (
-    UserUtils, OTPUtils, EmailUtils, JWTUtils
-)
+from auth.services import get_user_service, get_otp_service
 import logging
 
 logger = logging.getLogger(__name__)
@@ -18,41 +16,66 @@ logger = logging.getLogger(__name__)
 # Create router
 router = APIRouter()
 
-@router.post("/register", response_model=MessageResponse)
+@router.post("/register", response_model=MessageResponse, status_code=status.HTTP_201_CREATED)
 async def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
     """
     Register a new user and send OTP for email verification
+    
+    **Requirements:**
+    - **email**: Valid email address
+    - **username**: 3-50 alphanumeric characters, must be unique
+    - **password**: Minimum 8 characters with at least:
+        - One uppercase letter
+        - One lowercase letter
+        - One digit
+    
+    **Example Request:**
+    ```json
+    {
+        "email": "john@example.com",
+        "username": "john_doe",
+        "password": "SecurePass123!"
+    }
+    ```
     """
     try:
-        # Check if user already exists
-        existing_user_email = UserUtils.get_user_by_email(db, user_data.email)
+        user_service = get_user_service(db)
+        otp_service = get_otp_service(db)
+          # Check if user already exists by email
+        existing_user_email = user_service.get_user_by_email(user_data.email)
         if existing_user_email:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Email already registered"
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "message": "Email already registered",
+                    "field": "email",
+                    "error_code": "EMAIL_EXISTS"
+                }
             )
         
-        existing_user_username = UserUtils.get_user_by_username(db, user_data.username)
+        # Check if username is already taken
+        existing_user_username = user_service.get_user_by_username(user_data.username)
         if existing_user_username:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Username already taken"
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "message": "Username already taken. Please choose a different username.",
+                    "field": "username", 
+                    "error_code": "USERNAME_EXISTS"
+                }
             )
         
         # Create user
-        user = UserUtils.create_user(
-            db=db,
+        user = user_service.create_user(
             username=user_data.username,
             email=user_data.email,
             password=user_data.password
         )
+          # Generate and send OTP
+        result = otp_service.send_verification_otp(user_data.email)
         
-        # Generate and send OTP
-        otp = OTPUtils.create_otp(db, user_data.email, "registration")
-        email_sent = EmailUtils.send_registration_otp(user_data.email, otp, user_data.username)
-        
-        if not email_sent:
-            logger.warning(f"Failed to send registration OTP to {user_data.email}")
+        if not result.success:
+            logger.warning(f"Failed to send registration OTP to {user_data.email}: {result.message}")
             # Don't fail registration if email fails, just log it
         
         logger.info(f"User registered successfully: {user_data.email}")
@@ -76,22 +99,25 @@ async def verify_registration_otp(otp_data: OTPVerify, db: Session = Depends(get
     Verify OTP for user registration
     """
     try:
-        # Verify OTP
-        is_valid = OTPUtils.verify_otp(db, otp_data.email, otp_data.otp, "registration")
+        user_service = get_user_service(db)
+        otp_service = get_otp_service(db)
         
-        if not is_valid:
+        # Verify OTP
+        result = otp_service.verify_otp(otp_data.email, otp_data.otp, "registration")
+        
+        if not result.success:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid or expired OTP"
+                detail=result.message
             )
         
         # Mark user as verified
-        user_verified = UserUtils.verify_user_email(db, otp_data.email)
+        verify_result = user_service.verify_user_email(otp_data.email)
         
-        if not user_verified:
+        if not verify_result.success:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="User not found"
+                detail=verify_result.message
             )
         
         logger.info(f"Email verified successfully for: {otp_data.email}")
@@ -115,14 +141,18 @@ async def login_user(user_data: UserLogin, db: Session = Depends(get_db)):
     Authenticate user and return access token
     """
     try:
-        # Authenticate user
-        user = UserUtils.authenticate_user(db, user_data.email, user_data.password)
+        user_service = get_user_service(db)
         
-        if not user:
+        # Authenticate user
+        result = user_service.authenticate_user(user_data.email, user_data.password)
+        
+        if not result.success:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid email or password"
+                detail=result.message
             )
+        
+        user = result.data
         
         if not user.is_verified:
             raise HTTPException(
@@ -137,11 +167,17 @@ async def login_user(user_data: UserLogin, db: Session = Depends(get_db)):
             )
         
         # Create access token
-        access_token = JWTUtils.create_access_token(data={"sub": user.email})
+        token_result = user_service.create_user_token(user)
+        
+        if not token_result.success:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to create access token"
+            )
         
         logger.info(f"User logged in successfully: {user.email}")
         return TokenResponse(
-            access_token=access_token,
+            access_token=token_result.data,
             token_type="bearer",
             user=UserResponse.from_orm(user)
         )
