@@ -1,14 +1,19 @@
-from pydantic import BaseModel, EmailStr, validator
+from pydantic import BaseModel, EmailStr, validator, Field
 from typing import Optional
 from datetime import datetime
 
 # User Schemas
 class UserBase(BaseModel):
-    username: str
-    email: EmailStr
+    username: str = Field(..., example="john_doe", description="Username (3-50 chars: letters, numbers, _, -, .)")
+    email: EmailStr = Field(..., example="john@example.com", description="Valid email address")
 
 class UserCreate(UserBase):
-    password: str
+    password: str = Field(
+        ..., 
+        min_length=8,
+        example="SecurePass123!",
+        description="Password (min 8 chars, must contain uppercase, lowercase, digit)"
+    )
     
     @validator('password')
     def validate_password(cls, v):
@@ -28,16 +33,18 @@ class UserCreate(UserBase):
             raise ValueError('Username must be at least 3 characters long')
         if len(v) > 50:
             raise ValueError('Username must be less than 50 characters')
-        if not v.isalnum():
-            raise ValueError('Username must contain only alphanumeric characters')
+        # Allow letters, numbers, underscore, hyphen, dot
+        import re
+        if not re.match(r'^[a-zA-Z0-9_.-]+$', v):
+            raise ValueError('Username can only contain letters, numbers, underscore, hyphen, and dot')
         return v
 
 # Alias for backward compatibility and clarity
 UserRegister = UserCreate
 
 class UserLogin(BaseModel):
-    email: EmailStr
-    password: str
+    email: EmailStr = Field(..., example="john@example.com", description="Registered email address")
+    password: str = Field(..., example="SecurePass123!", description="User password")
 
 class UserResponse(UserBase):
     id: int
@@ -50,8 +57,8 @@ class UserResponse(UserBase):
 
 # OTP Schemas
 class OTPVerify(BaseModel):
-    email: EmailStr
-    otp: str
+    email: EmailStr = Field(..., example="john@example.com", description="Email address")
+    otp: str = Field(..., example="123456", description="6-digit OTP code")
     
     @validator('otp')
     def validate_otp(cls, v):
@@ -62,13 +69,13 @@ class OTPVerify(BaseModel):
         return v
 
 class EmailVerify(BaseModel):
-    email: EmailStr
+    email: EmailStr = Field(..., example="john@example.com", description="Email address")
 
 class PasswordReset(BaseModel):
-    email: EmailStr
-    otp: str
-    new_password: str
-    confirm_password: str
+    email: EmailStr = Field(..., example="john@example.com", description="Email address")
+    otp: str = Field(..., example="123456", description="6-digit OTP code")
+    new_password: str = Field(..., example="NewSecurePass123!", description="New password (min 8 chars, uppercase, lowercase, digit)")
+    confirm_password: str = Field(..., example="NewSecurePass123!", description="Confirm new password")
     
     @validator('new_password')
     def validate_new_password(cls, v):

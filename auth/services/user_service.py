@@ -221,9 +221,72 @@ class UserService(BaseService):
             
             # Update password
             self.user_repo.update_password(self.db, user, hashed_password)
-            
-            # Send confirmation email
+              # Send confirmation email
             email_utils.send_password_reset_confirmation(user.email, user.username)
+            
+            return ServiceResult.success_result(
+                message="Password updated successfully"
+            )
+            
+        except Exception as e:
+            return ServiceResult.error_result(f"Password update failed: {str(e)}")
+    
+    def create_user(self, username: str, email: str, password: str) -> User:
+        """Create a new user (used by register_user)"""
+        hashed_password = password_utils.hash_password(password)
+        return self.user_repo.create_user(
+            self.db,
+            username=username,
+            email=email,
+            hashed_password=hashed_password
+        )
+    
+    def get_user_by_email(self, email: str) -> Optional[User]:
+        """Get user by email"""
+        return self.user_repo.get_by_email(self.db, email)
+    
+    def get_user_by_username(self, username: str) -> Optional[User]:
+        """Get user by username"""
+        return self.user_repo.get_by_username(self.db, username)
+    
+    def verify_user_email(self, email: str) -> ServiceResult:
+        """Mark user email as verified"""
+        try:
+            user = self.user_repo.get_by_email(self.db, email)
+            if not user:
+                return ServiceResult.error_result("User not found")
+            
+            self.user_repo.verify_email(self.db, user)
+            return ServiceResult.success_result(message="Email verified successfully")
+            
+        except Exception as e:
+            return ServiceResult.error_result(f"Email verification failed: {str(e)}")
+    
+    def create_user_token(self, user: User) -> ServiceResult:
+        """Create access token for user"""
+        try:
+            token = jwt_utils.create_access_token(data={"sub": user.email})
+            return ServiceResult.success_result(data=token)
+        except Exception as e:
+            return ServiceResult.error_result(f"Token creation failed: {str(e)}")
+    
+    def update_user_password(self, email: str, new_password: str) -> ServiceResult:
+        """Update user password by email"""
+        try:
+            user = self.user_repo.get_by_email(self.db, email)
+            if not user:
+                return ServiceResult.error_result("User not found")
+            
+            # Check password strength
+            is_strong, password_errors = password_utils.is_strong_password(new_password)
+            if not is_strong:
+                return ServiceResult.error_result("Weak password", password_errors)
+            
+            # Hash new password
+            hashed_password = password_utils.hash_password(new_password)
+            
+            # Update password
+            self.user_repo.update_password(self.db, user, hashed_password)
             
             return ServiceResult.success_result(
                 message="Password updated successfully"

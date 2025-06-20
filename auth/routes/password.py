@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from database import get_db
 from auth.schemas import EmailVerify, OTPVerify, PasswordReset, MessageResponse
-from auth.utils import UserUtils, OTPUtils, EmailUtils
+from auth.services import get_user_service, get_otp_service
 import logging
 
 logger = logging.getLogger(__name__)
@@ -19,8 +19,11 @@ async def forgot_password(email_data: EmailVerify, db: Session = Depends(get_db)
     Send OTP for password reset
     """
     try:
+        user_service = get_user_service(db)
+        otp_service = get_otp_service(db)
+        
         # Check if user exists
-        user = UserUtils.get_user_by_email(db, email_data.email)
+        user = user_service.get_user_by_email(email_data.email)
         if not user:
             # For security, don't reveal if email exists or not
             return MessageResponse(
@@ -29,11 +32,10 @@ async def forgot_password(email_data: EmailVerify, db: Session = Depends(get_db)
             )
         
         # Generate and send OTP
-        otp = OTPUtils.create_otp(db, email_data.email, "forgot_password")
-        email_sent = EmailUtils.send_password_reset_otp(email_data.email, otp)
+        result = otp_service.send_password_reset_otp(email_data.email)
         
-        if not email_sent:
-            logger.warning(f"Failed to send password reset OTP to {email_data.email}")
+        if not result.success:
+            logger.warning(f"Failed to send password reset OTP to {email_data.email}: {result.message}")
             # Don't fail the request if email fails, just log it
         
         logger.info(f"Password reset OTP sent to: {email_data.email}")
@@ -55,13 +57,15 @@ async def verify_forgot_password_otp(otp_data: OTPVerify, db: Session = Depends(
     Verify OTP for password reset
     """
     try:
-        # Verify OTP
-        is_valid = OTPUtils.verify_otp(db, otp_data.email, otp_data.otp, "forgot_password")
+        otp_service = get_otp_service(db)
         
-        if not is_valid:
+        # Verify OTP
+        result = otp_service.verify_otp(otp_data.email, otp_data.otp, "forgot_password")
+        
+        if not result.success:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid or expired OTP"
+                detail=result.message
             )
         
         logger.info(f"Password reset OTP verified for: {otp_data.email}")
@@ -85,22 +89,25 @@ async def reset_password(reset_data: PasswordReset, db: Session = Depends(get_db
     Reset password after OTP verification
     """
     try:
-        # Verify OTP first
-        is_valid = OTPUtils.verify_otp(db, reset_data.email, reset_data.otp, "forgot_password")
+        user_service = get_user_service(db)
+        otp_service = get_otp_service(db)
         
-        if not is_valid:
+        # Verify OTP first
+        otp_result = otp_service.verify_otp(reset_data.email, reset_data.otp, "forgot_password")
+        
+        if not otp_result.success:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid or expired OTP"
+                detail=otp_result.message
             )
         
         # Update password
-        password_updated = UserUtils.update_user_password(db, reset_data.email, reset_data.new_password)
+        password_result = user_service.update_user_password(reset_data.email, reset_data.new_password)
         
-        if not password_updated:
+        if not password_result.success:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="User not found"
+                detail=password_result.message
             )
         
         logger.info(f"Password reset successfully for: {reset_data.email}")

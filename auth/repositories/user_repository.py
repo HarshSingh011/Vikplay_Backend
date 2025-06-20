@@ -23,17 +23,21 @@ class UserRepository(SQLAlchemyRepository[User]):
         return self.get_by_field(db, "username", username)
     
     def create_user(self, db: Session, email: str, username: str, hashed_password: str) -> User:
-        """Create a new user"""
-        user_data = {
-            "email": email,
-            "username": username,
-            "hashed_password": hashed_password,
-            "is_active": False,  # User needs to verify email first
-            "is_verified": False,
-            "created_at": datetime.utcnow(),
-            "updated_at": datetime.utcnow()
-        }
-        return self.create(db, user_data)
+        """Create a new user with unique constraint handling"""
+        try:
+            user_data = {
+                "email": email,
+                "username": username,
+                "hashed_password": hashed_password,
+                "is_active": False,  # User needs to verify email first
+                "is_verified": False,
+                "created_at": datetime.utcnow(),
+                "updated_at": datetime.utcnow()
+            }
+            return self.create(db, user_data)
+        except Exception as e:
+            # Re-raise to let the service layer handle the specific error
+            raise e
     
     def activate_user(self, db: Session, user: User) -> User:
         """Activate user after email verification"""

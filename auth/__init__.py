@@ -14,7 +14,8 @@ from .utils import password_utils, jwt_utils, otp_utils, email_utils
 __all__ = [
     # Models
     "User",
-    "OTP",    # Schemas
+    "OTP",
+    # Schemas
     "UserRegister",
     "UserLogin", 
     "TokenResponse",

@@ -171,6 +171,18 @@ class OTPService(BaseService):
         except Exception as e:
             return ServiceResult.error_result(f"OTP verification failed: {str(e)}")
     
+    def verify_otp(self, email: str, otp_code: str, otp_type: str) -> ServiceResult:
+        """Verify OTP for different types (registration, forgot_password)"""
+        try:
+            if otp_type == "registration":
+                return self.verify_email_otp(email, otp_code)
+            elif otp_type == "forgot_password":
+                return self.verify_password_reset_otp(email, otp_code)
+            else:
+                return ServiceResult.error_result("Invalid OTP type")
+        except Exception as e:
+            return ServiceResult.error_result(f"OTP verification failed: {str(e)}")
+    
     def cleanup_expired_otps(self) -> ServiceResult:
         """Clean up expired OTPs (for maintenance)"""
         try:
