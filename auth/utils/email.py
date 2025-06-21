@@ -18,9 +18,30 @@ class EmailUtils:
     def __init__(self):
         self.smtp_server = os.getenv("SMTP_SERVER", "smtp.gmail.com")
         self.smtp_port = int(os.getenv("SMTP_PORT", "587"))
-        self.sender_email = os.getenv("SENDER_EMAIL", "")
-        self.sender_password = os.getenv("SENDER_PASSWORD", "")
+        self.sender_email = os.getenv("EMAIL_USERNAME", "")
+        self.sender_password = os.getenv("EMAIL_PASSWORD", "")
+        self.from_email = os.getenv("FROM_EMAIL", self.sender_email)
         self.sender_name = os.getenv("SENDER_NAME", "VikPay")
+        
+        # Development mode - if no email credentials, use console logging
+        self.dev_mode = not (self.sender_email and self.sender_password)
+        
+        if self.dev_mode:
+            logger.info("📧 Email service running in DEVELOPMENT MODE - emails will be logged to console")
+    
+    def _send_email_console(self, to_email: str, subject: str, body: str) -> bool:
+        """Log email to console instead of sending (development mode)"""
+        print("\n" + "="*60)
+        print("📧 EMAIL (Development Mode)")
+        print("="*60)
+        print(f"From: {self.from_email}")
+        print(f"To: {to_email}")
+        print(f"Subject: {subject}")
+        print("-"*60)
+        print(body)
+        print("="*60)
+        logger.info(f"Email logged to console for {to_email}")
+        return True
     
     def _create_connection(self) -> Optional[smtplib.SMTP]:
         """Create SMTP connection"""
@@ -36,10 +57,15 @@ class EmailUtils:
     
     def send_email(self, to_email: str, subject: str, body: str, html_body: Optional[str] = None) -> bool:
         """Send an email"""
+        # If in development mode, log to console
+        if self.dev_mode:
+            email_content = html_body if html_body else body
+            return self._send_email_console(to_email, subject, email_content)
+        
         try:
             # Create message container
             msg = MIMEMultipart('alternative')
-            msg['From'] = f"{self.sender_name} <{self.sender_email}>"
+            msg['From'] = f"{self.sender_name} <{self.from_email}>"
             msg['To'] = to_email
             msg['Subject'] = subject
             

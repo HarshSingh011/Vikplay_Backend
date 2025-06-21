@@ -24,3 +24,13 @@ class OTP(Base):
     is_used = Column(Boolean, default=False)
     expires_at = Column(DateTime(timezone=True), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class PendingRegistration(Base):
+    __tablename__ = "pending_registrations"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String(50), nullable=False)
+    email = Column(String(100), unique=True, index=True, nullable=False)
+    hashed_password = Column(String(255), nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

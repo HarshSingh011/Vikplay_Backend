@@ -1,7 +1,7 @@
 """
 Authentication module with clean architecture
 """
-from .models import User, OTP
+from .models import User, OTP, PendingRegistration
 from .schemas import (
     UserRegister, UserLogin, TokenResponse, UserResponse,
     EmailVerify, OTPVerify, PasswordReset, MessageResponse
