@@ -23,6 +23,23 @@ app.add_middleware(
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+# Health check endpoint for Docker/Kubernetes
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for monitoring and load balancers"""
+    return {"status": "healthy", "service": "VikPay Backend", "version": "1.0.0"}
+
+@app.get("/")
+async def root():
+    """Root endpoint with API information"""
+    return {
+        "message": "Welcome to VikPay Backend API",
+        "version": "1.0.0",
+        "docs": "/docs",
+        "redoc": "/redoc",
+        "health": "/health"
+    }
+
 # Include routers AFTER app is defined
 from routes import videos
 app.include_router(videos.router)
@@ -48,6 +65,17 @@ try:
     logging.info("WebRTC router loaded successfully")
 except Exception as e:
     logging.error(f"Failed to load WebRTC router: {e}")
+
+# Health check endpoint for Kubernetes
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for Kubernetes liveness and readiness probes"""
+    return {
+        "status": "healthy",
+        "service": "VikPay Backend",
+        "version": "1.0.0",
+        "kubernetes_ready": True
+    }
 
 if __name__ == "__main__":
     import uvicorn
