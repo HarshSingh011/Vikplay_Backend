@@ -3,6 +3,8 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
 
+# Note: Auth models (User, OTP) are defined in auth/models.py
+
 class Category(Base):
     __tablename__ = "categories"
 
