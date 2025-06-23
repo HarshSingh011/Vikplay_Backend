@@ -1,0 +1,122 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vikpay-config
+  namespace: default
+data:
+  DATABASE_URL: "sqlite:///./vidplay.db"
+  SECRET_KEY: "your-super-secret-development-key-change-in-production"
+  ALGORITHM: "HS256"
+  ACCESS_TOKEN_EXPIRE_MINUTES: "30"
+  SMTP_SERVER: "smtp.gmail.com"
+  SMTP_PORT: "587"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vikpay-backend
+  namespace: default
+  labels:
+    app: vikpay-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vikpay-backend
+  template:
+    metadata:
+      labels:
+        app: vikpay-backend
+    spec:
+      containers:
+      - name: vikpay-backend
+        image: vikpay-backend:latest
+        ports:
+        - containerPort: 8000
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: vikpay-config
+              key: DATABASE_URL
+        - name: SECRET_KEY
+          valueFrom:
+            configMapKeyRef:
+              name: vikpay-config
+              key: SECRET_KEY
+        - name: ALGORITHM
+          valueFrom:
+            configMapKeyRef:
+              name: vikpay-config
+              key: ALGORITHM
+        - name: ACCESS_TOKEN_EXPIRE_MINUTES
+          valueFrom:
+            configMapKeyRef:
+              name: vikpay-config
+              key: ACCESS_TOKEN_EXPIRE_MINUTES
+        - name: EMAIL_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: vikpay-secrets
+              key: email-username
+        - name: EMAIL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: vikpay-secrets
+              key: email-password
+        - name: R2_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: vikpay-secrets
+              key: r2-access-key
+        - name: R2_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: vikpay-secrets
+              key: r2-secret-key
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vikpay-backend-service
+  namespace: default
+spec:
+  selector:
+    app: vikpay-backend
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8000
+  type: LoadBalancer
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: vikpay-secrets
+  namespace: default
+type: Opaque
+data:
+  # Base64 encoded values - replace with actual encoded secrets
+  email-username: eW91cl9lbWFpbEBnbWFpbC5jb20=  # your_email@gmail.com
+  email-password: eW91cl9hcHBfcGFzc3dvcmQ=      # your_app_password
+  r2-access-key: eW91cl9hY2Nlc3Nfa2V5           # your_access_key
+  r2-secret-key: eW91cl9zZWNyZXRfa2V5           # your_secret_key
