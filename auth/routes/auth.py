@@ -18,6 +18,10 @@ from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timedelta
 import os
 import logging
+from dotenv import load_dotenv
+
+# Load environment variables - force override
+load_dotenv(override=True)
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +65,6 @@ def send_email(to_email: str, subject: str, body: str) -> bool:
     try:
         if not EMAIL_USERNAME or not EMAIL_PASSWORD:
             logger.info(f"EMAIL CONSOLE MODE - To: {to_email}, Subject: {subject}")
-            logger.info(f"EMAIL BODY: {body}")
             return True
             
         msg = MIMEMultipart()
@@ -88,6 +91,7 @@ async def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
     Register a new user and send OTP for email verification.
     User will only be created in database after OTP verification.
     """
+    logger.info(f"Registration request for email: {user_data.email}")
     try:
         # Check if user already exists
         existing_user = db.query(User).filter(User.email == user_data.email).first()
@@ -137,9 +141,7 @@ async def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
             expires_at=expires_at
         )
         db.add(otp_record)
-        db.commit()
-        
-        # Send OTP email
+        db.commit()        # Send OTP email
         subject = "VikPay - Verify Your Registration"
         body = f"""
         <html>
@@ -149,14 +151,12 @@ async def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
             <div style="background-color: #f0f0f0; padding: 20px; text-align: center; margin: 20px 0;">
                 <h3 style="color: #007bff; font-size: 24px; letter-spacing: 5px;">{otp_code}</h3>
             </div>
-            <p>This OTP will expire in 10 minutes.</p>
-            <p>If you didn't create an account with VikPay, please ignore this email.</p>
+            <p>This OTP will expire in 10 minutes.</p>            <p>If you didn't create an account with VikPay, please ignore this email.</p>
             <br>
             <p>Best regards,<br>VikPay Team</p>
         </body>
         </html>
         """
-        
         email_sent = send_email(user_data.email, subject, body)
         
         if not email_sent:
@@ -165,55 +165,6 @@ async def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
         logger.info(f"Pending registration created for: {user_data.email}")
         return MessageResponse(
             message="Registration initiated! Please check your email for OTP verification. Complete verification within 24 hours.",
-            success=True
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Registration error: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Registration failed. Please try again."
-        )
-        
-        # Hash password
-        hashed_password = password_utils.hash_password(user_data.password)
-        
-        # Create pending registration (expires in 30 minutes)
-        expires_at = datetime.utcnow() + timedelta(minutes=30)
-        pending_registration = PendingRegistration(
-            username=user_data.username,
-            email=user_data.email,
-            hashed_password=hashed_password,
-            expires_at=expires_at
-        )
-        db.add(pending_registration)
-        db.commit()
-        
-        # Generate and send OTP
-        otp_code = otp_utils.generate_otp()
-        otp_expires = datetime.utcnow() + timedelta(minutes=10)
-        
-        # Store OTP
-        otp_record = OTP(
-            email=user_data.email,
-            otp_code=otp_code,
-            otp_type="registration",
-            expires_at=otp_expires
-        )
-        db.add(otp_record)
-        db.commit()
-        
-        # Send OTP email
-        email_sent = email_utils.send_registration_otp(user_data.email, otp_code, user_data.username)
-        
-        if not email_sent:
-            logger.warning(f"Failed to send registration OTP to {user_data.email}")
-        
-        logger.info(f"Pending registration created for: {user_data.email}")
-        return MessageResponse(
-            message="Registration initiated! Please check your email for OTP verification. You have 10 minutes to verify.",
             success=True
         )
         
@@ -315,9 +266,8 @@ async def login_user(user_data: UserLogin, db: Session = Depends(get_db)):
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid email or password"
             )
-        
-        # Verify password
-        if not password_utils.verify_password(user_data.password, user.hashed_password):
+          # Verify password
+        if not verify_password(user_data.password, user.hashed_password):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid email or password"
@@ -334,9 +284,8 @@ async def login_user(user_data: UserLogin, db: Session = Depends(get_db)):
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Account is disabled"
             )
-        
-        # Create access token
-        access_token = jwt_utils.create_access_token(data={"sub": user.email})
+          # Create access token
+        access_token = create_access_token(data={"sub": user.email})
         
         logger.info(f"User logged in successfully: {user.email}")
         return TokenResponse(

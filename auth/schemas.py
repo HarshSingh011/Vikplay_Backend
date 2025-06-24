@@ -73,7 +73,6 @@ class EmailVerify(BaseModel):
 
 class PasswordReset(BaseModel):
     email: EmailStr = Field(..., example="john@example.com", description="Email address")
-    otp: str = Field(..., example="123456", description="6-digit OTP code")
     new_password: str = Field(..., example="NewSecurePass123!", description="New password (min 8 chars, uppercase, lowercase, digit)")
     confirm_password: str = Field(..., example="NewSecurePass123!", description="Confirm new password")
     
@@ -93,14 +92,6 @@ class PasswordReset(BaseModel):
     def passwords_match(cls, v, values):
         if 'new_password' in values and v != values['new_password']:
             raise ValueError('Passwords do not match')
-        return v
-    
-    @validator('otp')
-    def validate_otp(cls, v):
-        if len(v) != 6:
-            raise ValueError('OTP must be 6 digits')
-        if not v.isdigit():
-            raise ValueError('OTP must contain only digits')
         return v
 
 # Response Schemas

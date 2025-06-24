@@ -8,6 +8,10 @@ from email.mime.multipart import MIMEMultipart
 from typing import Optional
 import os
 import logging
+from dotenv import load_dotenv
+
+# Force load .env file to override system environment variables
+load_dotenv(override=True)
 
 logger = logging.getLogger(__name__)
 
