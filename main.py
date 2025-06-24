@@ -1,4 +1,5 @@
 import logging
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -6,7 +7,11 @@ from database import engine
 import models.models as models
 import auth.models as auth_models  # Import auth models to register them
 
+# Load environment variables - override system env vars
+load_dotenv(override=True)
+
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Create all tables including auth tables
 models.Base.metadata.create_all(bind=engine)
@@ -65,17 +70,6 @@ try:
     logging.info("WebRTC router loaded successfully")
 except Exception as e:
     logging.error(f"Failed to load WebRTC router: {e}")
-
-# Health check endpoint for Kubernetes
-@app.get("/health")
-async def health_check():
-    """Health check endpoint for Kubernetes liveness and readiness probes"""
-    return {
-        "status": "healthy",
-        "service": "VikPay Backend",
-        "version": "1.0.0",
-        "kubernetes_ready": True
-    }
 
 if __name__ == "__main__":
     import uvicorn
