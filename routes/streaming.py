@@ -4,7 +4,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status, Request, Form, File, UploadFile
 from sqlalchemy.orm import Session
 from database import get_db
-import models.models as models
+import webrtc.models as models  # Use webrtc models for Stream and ChatMessage
 import schemas.streaming as schemas
 from utils.websocket import ConnectionManager
 from r2_utils import upload_file_to_r2
