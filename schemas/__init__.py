@@ -1,13 +1,12 @@
-# Import video schemas
-from .schemas import VideoBase, VideoCreate, Video, CategoryBase, CategoryCreate, Category
+# Legacy schemas __init__.py file
+# Video schemas have been moved to video.schemas
+# Only streaming schemas remain here
 
 # Import streaming schemas
 from .streaming import StreamBase, StreamCreate, Stream, StreamPublic, ChatMessageBase, ChatMessageCreate, ChatMessage
 
-# Make everything available at the top level
+# Make streaming schemas available at the top level
 __all__ = [
-    'VideoBase', 'VideoCreate', 'Video', 
-    'CategoryBase', 'CategoryCreate', 'Category',
     'StreamBase', 'StreamCreate', 'Stream', 'StreamPublic',
     'ChatMessageBase', 'ChatMessageCreate', 'ChatMessage'
 ]
