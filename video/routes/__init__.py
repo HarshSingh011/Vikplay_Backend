@@ -6,6 +6,8 @@ from database import get_db
 from video.models import Video, Category
 from video.schemas import VideoCreate, Video as VideoResponse, Category as CategoryResponse
 from video.services import VideoService, CategoryService
+from r2_utils import test_r2_connection
+from r2_utils import test_r2_connection
 
 router = APIRouter(
     prefix="/videos",
@@ -47,6 +49,18 @@ def get_categories(db: Session = Depends(get_db)):
     """
     video_service = VideoService(db)
     return video_service.get_categories()
+
+@router.get("/storage-status")
+def check_storage_status():
+    """
+    Check R2 storage connectivity status
+    """
+    r2_status = test_r2_connection()
+    return {
+        "r2_storage": r2_status,
+        "local_fallback": "enabled", 
+        "message": "Storage system ready" if r2_status["status"] == "success" else "Using local storage fallback"
+    }
 
 @router.get("/{video_id}", response_model=VideoResponse)
 def get_video(video_id: int, db: Session = Depends(get_db)):
