@@ -3,8 +3,9 @@
 Create database tables for VidPlay application
 """
 from database import engine, Base
-import models.models as models
+import video.models as video_models
 import auth.models as auth_models
+import webrtc.models as webrtc_models
 
 def create_tables():
     """Create all database tables"""

@@ -4,8 +4,11 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from database import engine
-import models.models as models
-import auth.models as auth_models  # Import auth models to register them
+
+# Import all models to register them with SQLAlchemy
+import auth.models as auth_models  # Auth models
+import video.models as video_models  # Video models  
+import webrtc.models as webrtc_models  # WebRTC and streaming models
 
 # Load environment variables - override system env vars
 load_dotenv(override=True)
@@ -13,8 +16,10 @@ load_dotenv(override=True)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Create all tables including auth tables
-models.Base.metadata.create_all(bind=engine)
+# Create all tables including all module tables
+auth_models.Base.metadata.create_all(bind=engine)
+video_models.Base.metadata.create_all(bind=engine)
+webrtc_models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Video Server API")
 
@@ -46,10 +51,15 @@ async def root():
     }
 
 # Include routers AFTER app is defined
-from routes import videos
-app.include_router(videos.router)
+# Video module
+try:
+    from video import router as video_router
+    app.include_router(video_router)
+    logging.info("Video router loaded successfully")
+except Exception as e:
+    logging.error(f"Failed to load video router: {e}")
 
-# Include authentication routes
+# Authentication routes
 try:
     from auth import router as auth_router
     app.include_router(auth_router)
@@ -57,6 +67,7 @@ try:
 except Exception as e:
     logging.error(f"Failed to load auth router: {e}")
 
+# Streaming routes (legacy - keeping for now)
 try:
     from routes import streaming
     app.include_router(streaming.router)
@@ -64,9 +75,10 @@ try:
 except Exception as e:
     logging.error(f"Failed to load streaming router: {e}")
 
+# WebRTC routes
 try:
-    from routes import webrtc
-    app.include_router(webrtc.router)
+    from webrtc import router as webrtc_router
+    app.include_router(webrtc_router)
     logging.info("WebRTC router loaded successfully")
 except Exception as e:
     logging.error(f"Failed to load WebRTC router: {e}")

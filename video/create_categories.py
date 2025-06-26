@@ -1,5 +1,11 @@
+import sys
+import os
+# Add parent directory to path so we can import from root
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from database import SessionLocal, engine
-import models.models as models
+import video.models as models
+from video.services import CategoryService
 
 # Create tables if they don't exist
 models.Base.metadata.create_all(bind=engine)
@@ -19,19 +25,24 @@ initial_categories = [
 ]
 
 def create_initial_categories():
+    """Create initial video categories"""
     db = SessionLocal()
     try:
         # Check if categories already exist
         existing_count = db.query(models.Category).count()
         if existing_count == 0:
-            # Add initial categories
-            for category_data in initial_categories:
-                category = models.Category(**category_data)
-                db.add(category)
-            db.commit()
-            print(f"Added {len(initial_categories)} initial categories")
+            category_service = CategoryService(db)
+            created = category_service.create_categories_batch(initial_categories)
+            
+            print(f"Created {len(created)} categories:")
+            for category in created:
+                print(f"  - {category.name}: {category.description}")
         else:
             print(f"Categories already exist. Found {existing_count} categories.")
+            
+    except Exception as e:
+        print(f"Error creating categories: {e}")
+        db.rollback()
     finally:
         db.close()
 
