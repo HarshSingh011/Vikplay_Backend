@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 # Create all tables including auth tables
 models.Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="Video Server API")
+app = FastAPI(title="VikPay Video Platform API", version="2.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -32,14 +32,21 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 @app.get("/health")
 async def health_check():
     """Health check endpoint for monitoring and load balancers"""
-    return {"status": "healthy", "service": "VikPay Backend", "version": "1.0.0"}
+    return {"status": "healthy", "service": "VikPay Backend", "version": "2.0.0"}
 
 @app.get("/")
 async def root():
     """Root endpoint with API information"""
     return {
-        "message": "Welcome to VikPay Backend API",
-        "version": "1.0.0",
+        "message": "Welcome to VikPay Video Platform API",
+        "version": "2.0.0",
+        "features": [
+            "Video Management",
+            "User Authentication", 
+            "AI-Powered Recommendations",
+            "WebRTC Streaming",
+            "User History Tracking"
+        ],
         "docs": "/docs",
         "redoc": "/redoc",
         "health": "/health"
@@ -48,6 +55,22 @@ async def root():
 # Include routers AFTER app is defined
 from routes import videos
 app.include_router(videos.router)
+
+# Include video module routes
+try:
+    from video.routes.video_routes import router as video_router
+    app.include_router(video_router)
+    logging.info("Video router loaded successfully")
+except Exception as e:
+    logging.error(f"Failed to load video router: {e}")
+
+# Include AI recommendation routes
+try:
+    from ai.routes.ai_routes import router as ai_router
+    app.include_router(ai_router)
+    logging.info("AI router loaded successfully")
+except Exception as e:
+    logging.error(f"Failed to load AI router: {e}")
 
 # Include authentication routes
 try:
