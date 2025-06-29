@@ -1,33 +1,10 @@
-from pydantic import BaseModel
-from datetime import datetime
-from typing import Optional
+"""Video schemas module"""
 
-class CategoryBase(BaseModel):
-    name: str
-    description: Optional[str] = None
+from .video_schemas import *
 
-class CategoryCreate(CategoryBase):
-    pass
-
-class Category(CategoryBase):
-    id: int
-
-    class Config:
-        from_attributes = True
-
-class VideoBase(BaseModel):
-    title: str
-    description: Optional[str] = None
-    category_id: Optional[int] = None
-
-class VideoCreate(VideoBase):
-    pass
-
-class Video(VideoBase):
-    id: int
-    file_url: str
-    created_at: datetime
-    category: Optional[Category] = None
-
-    class Config:
-        from_attributes = True
+__all__ = [
+    "VideoBase", "VideoCreate", "VideoUpdate", "VideoResponse",
+    "CategoryBase", "CategoryCreate", "CategoryUpdate", "CategoryResponse", 
+    "UserPreferencesBase", "UserPreferencesCreate", "UserPreferencesResponse",
+    "WatchProgressUpdate", "VideoRating", "UserVideoHistoryResponse"
+]
