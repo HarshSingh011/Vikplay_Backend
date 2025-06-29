@@ -7,8 +7,7 @@ from database import engine
 
 # Import all models to register them with SQLAlchemy
 import auth.models as auth_models  # Auth models
-import video.models as video_models  # Video models  
-import webrtc.models as webrtc_models  # WebRTC and streaming models
+import video.models.video_models as video_models  # Video models
 
 # Load environment variables - override system env vars
 load_dotenv(override=True)
@@ -19,7 +18,6 @@ logger = logging.getLogger(__name__)
 # Create all tables including all module tables
 auth_models.Base.metadata.create_all(bind=engine)
 video_models.Base.metadata.create_all(bind=engine)
-webrtc_models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Video Server API")
 
@@ -59,9 +57,17 @@ try:
 except Exception as e:
     logging.error(f"Failed to load video router: {e}")
 
+# AI module
+try:
+    from ai import router as ai_router
+    app.include_router(ai_router)
+    logging.info("AI router loaded successfully")
+except Exception as e:
+    logging.error(f"Failed to load AI router: {e}")
+
 # Authentication routes
 try:
-    from auth import router as auth_router
+    from auth import router as auth_router  
     app.include_router(auth_router)
     logging.info("Auth router loaded successfully")
 except Exception as e:
@@ -75,11 +81,11 @@ try:
 except Exception as e:
     logging.error(f"Failed to load streaming router: {e}")
 
-# WebRTC routes
+# WebRTC routes (legacy - keeping for now)
 try:
-    from webrtc import router as webrtc_router
-    app.include_router(webrtc_router)
-    logging.info("WebRTC router loaded successfully")
+    from routes import webrtc
+    app.include_router(webrtc.router)
+    logging.info("WebRTC router loaded successfully") 
 except Exception as e:
     logging.error(f"Failed to load WebRTC router: {e}")
 
