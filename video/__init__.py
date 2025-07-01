@@ -1,15 +1,13 @@
 """
-Video module for VikPay - handles video upload, storage, and retrieval
+Video Module - Contains video management functionality
 """
 
-from .routes import router
-from .models import Video, Category
-from .services import VideoService, CategoryService
-from .repositories import VideoRepository, CategoryRepository
+from .routes.video_routes import router as video_router
 
 __all__ = [
-    "router", 
-    "Video", "Category",
-    "VideoService", "CategoryService",
-    "VideoRepository", "CategoryRepository"
+    "video_router",
+    "router"
 ]
+
+# Alias for convenience
+router = video_router
