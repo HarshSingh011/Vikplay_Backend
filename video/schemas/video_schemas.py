@@ -1,9 +1,9 @@
 """
-Video schemas for request/response models
+Video schemas for the VikPay Backend
+Request/Response models for automatic data collection
 """
-
-from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field
+from typing import Optional, List, Dict, Any, Union
 from datetime import datetime
 
 # Video schemas
@@ -124,3 +124,167 @@ class UserVideoHistoryResponse(BaseModel):
     
     class Config:
         from_attributes = True
+
+
+# ====== AUTOMATIC COLLECTION SCHEMAS ======
+
+# 1. VIEWING HISTORY TRACKING (Enhanced)
+class WatchProgressUpdateEnhanced(BaseModel):
+    """
+    AUTOMATIC COLLECTION: Enhanced Viewing History
+    Sent automatically when user watches video
+    """
+    video_id: int
+    watch_duration: int  # seconds watched in this session
+    completion_percentage: float  # current % of video completed
+    device_type: Optional[str] = None
+    session_id: Optional[str] = None
+
+
+class VideoEngagement(BaseModel):
+    """
+    AUTOMATIC COLLECTION: Engagement Metrics
+    Sent when user interacts with video
+    """
+    video_id: int
+    rating: Optional[int] = Field(None, ge=1, le=5)  # 1-5 stars
+    liked: Optional[bool] = None  # True=like, False=dislike
+    shared: bool = False
+    bookmarked: bool = False
+
+
+class VideoInteraction(BaseModel):
+    """
+    AUTOMATIC COLLECTION: Detailed Engagement
+    Tracks every user interaction
+    """
+    video_id: int
+    interaction_type: str  # play, pause, seek, like, share, comment, etc.
+    interaction_value: Optional[str] = None  # specific value
+    video_timestamp: Optional[int] = None  # where in video
+    session_id: Optional[str] = None
+    device_type: Optional[str] = None
+
+
+# 2. SEARCH QUERY TRACKING
+class SearchQueryLog(BaseModel):
+    """
+    AUTOMATIC COLLECTION: Search Queries
+    Logged automatically when user searches
+    """
+    search_query: str = Field(..., max_length=500)
+    search_filters: Optional[Dict[str, Any]] = None
+    device_type: Optional[str] = None
+
+
+class SearchResultClick(BaseModel):
+    """
+    AUTOMATIC COLLECTION: Search Interaction
+    Logged when user clicks search result
+    """
+    search_id: int  # ID of the search query
+    clicked_video_id: int
+    click_position: int  # position in search results
+    time_to_click: Optional[float] = None  # seconds from search to click
+
+
+# 3. SESSION PATTERN TRACKING
+class SessionStart(BaseModel):
+    """
+    AUTOMATIC COLLECTION: Session Patterns
+    Logged when user starts session
+    """
+    session_id: str
+    device_type: Optional[str] = None
+    browser: Optional[str] = None
+    os: Optional[str] = None
+    user_agent: Optional[str] = None
+
+
+class SessionActivity(BaseModel):
+    """
+    AUTOMATIC COLLECTION: Session Activity
+    Updated throughout session
+    """
+    session_id: str
+    videos_watched: int = 0
+    searches_performed: int = 0
+    videos_liked: int = 0
+    videos_shared: int = 0
+
+
+class SessionEnd(BaseModel):
+    """
+    AUTOMATIC COLLECTION: Session End
+    Logged when session ends
+    """
+    session_id: str
+    session_duration: int  # total seconds
+
+
+# RESPONSE SCHEMAS FOR ANALYTICS
+class UserSearchHistoryResponse(BaseModel):
+    id: int
+    search_query: str
+    searched_at: datetime
+    results_count: int
+    clicked_video_id: Optional[int] = None
+    click_position: Optional[int] = None
+
+    class Config:
+        from_attributes = True
+
+
+class UserSessionResponse(BaseModel):
+    id: int
+    session_id: str
+    session_start: datetime
+    session_end: Optional[datetime] = None
+    session_duration: Optional[int] = None
+    videos_watched: int
+    searches_performed: int
+    device_type: Optional[str] = None
+    time_of_day: Optional[str] = None
+    day_of_week: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+# USER PREFERENCES
+class UserPreferencesUpdate(BaseModel):
+    """User can explicitly set these preferences"""
+    preferred_categories: Optional[List[str]] = None
+    disliked_categories: Optional[List[str]] = None
+    preferred_duration_min: Optional[int] = None
+    preferred_duration_max: Optional[int] = None
+    preferred_languages: Optional[List[str]] = None
+    content_rating_preference: Optional[str] = None
+    mature_content_allowed: Optional[bool] = None
+    violence_filter: Optional[bool] = None
+    profanity_filter: Optional[bool] = None
+
+
+# ANALYTICS SCHEMAS
+class UserAnalytics(BaseModel):
+    """Comprehensive user analytics for AI"""
+    total_videos_watched: int
+    total_watch_time: int  # seconds
+    average_completion_rate: float
+    favorite_categories: List[Dict[str, Union[str, int]]]  # [{"category": "tech", "count": 10}]
+    most_active_times: List[str]  # ["evening", "weekend"]
+    preferred_video_length: int  # average preferred duration
+    engagement_score: float  # overall user engagement
+    recent_interests: List[str]  # recent category interests
+
+
+class VideoAnalytics(BaseModel):
+    """Video performance analytics"""
+    video_id: int
+    total_views: int
+    unique_viewers: int
+    average_watch_time: float
+    completion_rate: float
+    engagement_rate: float  # likes + shares / views
+    retention_curve: List[float]  # retention at different time points
+    popular_search_terms: List[str]  # terms that led to this video
