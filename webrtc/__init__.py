@@ -1,12 +1,12 @@
 """
 WebRTC module - handles real-time communication and signaling
 """
-from .routes import router
-from .utils import webrtc_manager
+from .routes.webrtc import router as webrtc_router
 
 __all__ = [
-    # Routes
-    "router",
-    # Utils
-    "webrtc_manager"
+    "webrtc_router", 
+    "router"
 ]
+
+# Alias for convenience
+router = webrtc_router

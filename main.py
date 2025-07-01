@@ -73,18 +73,10 @@ try:
 except Exception as e:
     logging.error(f"Failed to load auth router: {e}")
 
-# Streaming routes (legacy - keeping for now)
+# WebRTC routes (modular)
 try:
-    from routes import streaming
-    app.include_router(streaming.router)
-    logging.info("Streaming router loaded successfully")
-except Exception as e:
-    logging.error(f"Failed to load streaming router: {e}")
-
-# WebRTC routes (legacy - keeping for now)
-try:
-    from routes import webrtc
-    app.include_router(webrtc.router)
+    from webrtc import router as webrtc_router
+    app.include_router(webrtc_router)
     logging.info("WebRTC router loaded successfully") 
 except Exception as e:
     logging.error(f"Failed to load WebRTC router: {e}")

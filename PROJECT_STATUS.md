@@ -42,29 +42,39 @@ VikPay-Backend/
 │   ├── routes/
 │   └── utils/
 │
-├── 📡 routes/                      # Legacy Routes (Working)
+├── 🌐 webrtc/                       # WebRTC Module (Modular)
 │   ├── __init__.py
-│   ├── streaming.py               # Live streaming
-│   ├── webrtc.py                 # WebRTC functionality
-│   ├── videos.py                 # Original video routes
-│   └── webrtc_*.py               # WebRTC variants
+│   ├── models.py                  # WebRTC models
+│   ├── schemas.py                 # WebRTC schemas
+│   ├── routes/
+│   │   ├── __init__.py
+│   │   ├── webrtc.py             # Main WebRTC routes
+│   │   ├── webrtc_simple.py      # Simple WebRTC
+│   │   └── webrtc_fixed.py       # Fixed WebRTC implementation
+│   ├── utils/
+│   │   ├── __init__.py
+│   │   ├── webrtc.py             # WebRTC utilities
+│   │   ├── webrtc_original.py    # Original implementation
+│   │   ├── webrtc_simple.py      # Simple utilities
+│   │   └── webrtc_simplified.py  # Simplified utilities
+│   └── static/
+│       ├── webrtc-test.html      # WebRTC test page
+│       ├── webrtc-simple.html    # Simple WebRTC interface
+│       └── webrtc-fixed.html     # Fixed WebRTC interface
 │
-├── 📊 models/                      # Database Models
-│   ├── __init__.py
-│   ├── models.py                 # Enhanced with user history
-│   └── streaming.py
+├── � models/                      # Database Models  
+│   └── models.py                 # Enhanced with user history
 │
 ├── 📋 schemas/                     # Pydantic Schemas
-│   ├── __init__.py
-│   ├── schemas.py
-│   └── streaming.py
+│   └── __init__.py
 │
-├── 🛠️ utils/                       # Utilities
-│   ├── webrtc.py
-│   ├── websocket.py
-│   └── ...
+├── 🛠️ utils/                       # Utilities (Cleaned up)
+│   └── __pycache__/
 │
-├── 🗄️ static/                      # Static files
+├── 📡 routes/                      # Legacy Routes (Minimal)
+│   └── __init__.py
+│
+├── �🗄️ static/                      # Static files
 ├── 📄 main.py                      # FastAPI app (Updated)
 ├── 📋 requirements.txt             # Dependencies (Updated)
 └── 🤖 AI_RECOMMENDATION_SYSTEM.md  # Documentation
@@ -92,14 +102,15 @@ VikPay-Backend/
   - User preferences
   - Analytics
 
-### 📡 Streaming & WebRTC
-- **Status**: ✅ Working (Legacy structure)
-- **Location**: `routes/streaming.py`, `routes/webrtc.py`
+### 🌐 WebRTC System
+- **Status**: ✅ Fully modular
+- **Location**: `webrtc/` module  
 - **Features**: 
-  - Live streaming
-  - WebRTC connections
-  - Chat functionality
-  - Viewer management
+  - WebRTC connections and signaling
+  - Real-time communication
+  - Multiple WebRTC implementations
+  - Static test interfaces
+  - Comprehensive utilities
 
 ### 🔐 Authentication
 - **Status**: ✅ Working
@@ -149,10 +160,9 @@ GET  /api/videos/analytics/            # User analytics
 
 ### Legacy Endpoints (Still Working)
 ```
-GET  /streaming/*                      # Live streaming
-GET  /webrtc/*                        # WebRTC functionality
-POST /videos/*                        # Original video routes
-GET  /auth/*                          # Authentication
+GET  /webrtc/*                    # WebRTC functionality (modular)
+POST /videos/*                    # Original video routes
+GET  /auth/*                      # Authentication
 ```
 
 ## 💾 Database Schema
