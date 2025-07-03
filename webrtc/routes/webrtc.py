@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 import models.models as models
 # Import simplified webrtc functions
-from utils.webrtc import create_broadcaster, create_viewer, get_viewer_count, handle_offer, handle_ice_candidate
+from webrtc.utils.webrtc import create_broadcaster, create_viewer, get_viewer_count, handle_offer, handle_ice_candidate
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,7 @@ router = APIRouter(
 async def webrtc_test():
     """Simple WebRTC test endpoint"""
     # Import here to avoid circular imports
-    from utils.webrtc import webrtc_manager
+    from webrtc.utils.webrtc import webrtc_manager
     
     return {
         "status": "success",
@@ -445,7 +445,7 @@ async def websocket_signaling(websocket: WebSocket, stream_id: int, client_id: s
     await websocket.accept()
     
     # Store the websocket connection
-    from utils.webrtc import webrtc_manager
+    from webrtc.utils.webrtc import webrtc_manager
     await webrtc_manager.add_signaling_connection(stream_id, client_id, websocket)
     
     try:

@@ -24,6 +24,10 @@ class VideoCreate(VideoBase):
     mime_type: Optional[str] = None
     thumbnail_path: Optional[str] = None
 
+class VideoCreateWithAuth(VideoCreate):
+    """Schema for creating a video with authentication"""
+    user_id: int  # Required for authenticated requests
+
 class VideoUpdate(BaseModel):
     """Schema for updating a video"""
     title: Optional[str] = Field(None, min_length=1, max_length=255)
@@ -31,6 +35,15 @@ class VideoUpdate(BaseModel):
     category_id: Optional[int] = None
     is_public: Optional[bool] = None
     thumbnail_path: Optional[str] = None
+
+class VideoUpdateWithAuth(VideoUpdate):
+    """Schema for updating a video with authentication"""
+    user_id: int  # Required for authenticated requests
+
+class VideoDeleteWithAuth(BaseModel):
+    """Schema for deleting a video with authentication"""
+    user_id: int  # Required for authenticated requests
+    video_id: int
 
 class VideoResponse(VideoBase):
     """Schema for video response"""
@@ -165,6 +178,18 @@ class VideoInteraction(BaseModel):
     session_id: Optional[str] = None
     device_type: Optional[str] = None
 
+# Auth versions of tracking schemas
+class WatchProgressWithAuth(WatchProgressUpdateEnhanced):
+    """Watch progress update with authentication"""
+    user_id: int  # Required for authenticated requests
+
+class EngagementWithAuth(VideoEngagement):
+    """Video engagement with authentication"""
+    user_id: int  # Required for authenticated requests
+
+class InteractionWithAuth(VideoInteraction):
+    """Video interaction with authentication"""
+    user_id: int  # Required for authenticated requests
 
 # 2. SEARCH QUERY TRACKING
 class SearchQueryLog(BaseModel):
@@ -187,6 +212,14 @@ class SearchResultClick(BaseModel):
     click_position: int  # position in search results
     time_to_click: Optional[float] = None  # seconds from search to click
 
+# Auth versions of search schemas
+class SearchWithAuth(SearchQueryLog):
+    """Search query with authentication"""
+    user_id: int  # Required for authenticated requests
+
+class SearchClickWithAuth(SearchResultClick):
+    """Search result click with authentication"""
+    user_id: int  # Required for authenticated requests
 
 # 3. SESSION PATTERN TRACKING
 class SessionStart(BaseModel):
@@ -220,6 +253,22 @@ class SessionEnd(BaseModel):
     """
     session_id: str
     session_duration: int  # total seconds
+
+
+# SESSION SCHEMAS WITH AUTHENTICATION
+class SessionStartWithAuth(SessionStart):
+    """Session start with authentication"""
+    user_id: int  # Required for authenticated requests
+
+
+class SessionActivityWithAuth(SessionActivity):
+    """Session activity with authentication"""
+    user_id: int  # Required for authenticated requests
+
+
+class SessionEndWithAuth(SessionEnd):
+    """Session end with authentication"""
+    user_id: int  # Required for authenticated requests
 
 
 # RESPONSE SCHEMAS FOR ANALYTICS
@@ -288,3 +337,42 @@ class VideoAnalytics(BaseModel):
     engagement_rate: float  # likes + shares / views
     retention_curve: List[float]  # retention at different time points
     popular_search_terms: List[str]  # terms that led to this video
+
+
+# ANALYTICS REQUEST SCHEMAS
+class AnalyticsRequest(BaseModel):
+    """Base analytics request schema"""
+    user_id: int
+    date_from: Optional[datetime] = None
+    date_to: Optional[datetime] = None
+
+
+class UserHistoryRequest(BaseModel):
+    """Request schema for user history analytics"""
+    user_id: int
+    limit: Optional[int] = 50
+    offset: Optional[int] = 0
+    category: Optional[str] = None
+
+
+# CATEGORY SCHEMAS
+class CategoryCreate(BaseModel):
+    """Category creation schema"""
+    name: str
+    description: Optional[str] = None
+
+
+class CategoryCreateWithAuth(CategoryCreate):
+    """Category creation with authentication"""
+    user_id: int  # Required for authenticated requests
+
+
+class CategoryResponse(BaseModel):
+    """Category response schema"""
+    id: int
+    name: str
+    description: Optional[str] = None
+    video_count: Optional[int] = 0
+    
+    class Config:
+        from_attributes = True
