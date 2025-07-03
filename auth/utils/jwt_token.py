@@ -111,3 +111,107 @@ class JWTUtils:
 
 # Global instance
 jwt_utils = JWTUtils()
+
+
+# Utility functions for FastAPI dependency injection
+from fastapi import HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from sqlalchemy.orm import Session
+from pydantic import BaseModel
+
+
+class TokenPayload(BaseModel):
+    """Token payload model"""
+    access_token: str
+
+
+def verify_token_from_body(token_data: TokenPayload, db: Session) -> dict:
+    """
+    Verify access token from request body and return user data
+    
+    Args:
+        token_data: Pydantic model containing access_token
+        db: Database session
+        
+    Returns:
+        User data from token
+        
+    Raises:
+        HTTPException: If token is invalid or expired
+    """
+    try:
+        # Verify token
+        payload = jwt_utils.verify_token(token_data.access_token, "access")
+        
+        if not payload:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired access token"
+            )
+        
+        # Extract user info from payload
+        user_data = {
+            "user_id": payload.get("sub"),
+            "email": payload.get("email"),
+            "username": payload.get("username"),
+            "exp": payload.get("exp"),
+            "iat": payload.get("iat")
+        }
+        
+        return user_data
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error verifying token from body: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid access token"
+        )
+
+
+def get_current_user(credentials: HTTPAuthorizationCredentials, db: Session) -> dict:
+    """
+    Get current user from Authorization header
+    
+    Args:
+        credentials: HTTP Authorization credentials
+        db: Database session
+        
+    Returns:
+        User data from token
+        
+    Raises:
+        HTTPException: If token is invalid or expired
+    """
+    try:
+        # Verify token
+        payload = jwt_utils.verify_token(credentials.credentials, "access")
+        
+        if not payload:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired access token",
+                headers={"WWW-Authenticate": "Bearer"}
+            )
+        
+        # Extract user info from payload
+        user_data = {
+            "user_id": payload.get("sub"),
+            "email": payload.get("email"),
+            "username": payload.get("username"),
+            "exp": payload.get("exp"),
+            "iat": payload.get("iat")
+        }
+        
+        return user_data
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting current user: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid access token",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
