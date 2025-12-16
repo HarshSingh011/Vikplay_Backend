@@ -15,7 +15,7 @@ from video.schemas.video_schemas import (
 )
 from video.utils import extract_device_info
 
-router = APIRouter(prefix="/session", tags=["session"])
+router = APIRouter(prefix="/session")
 
 # ====== DEPENDENCY INJECTION ======
 

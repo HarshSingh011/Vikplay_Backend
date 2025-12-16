@@ -15,7 +15,7 @@ from video.schemas.video_schemas import (
     CategoryCreate, CategoryResponse, VideoResponse, CategoryCreateWithAuth
 )
 
-router = APIRouter(prefix="/categories", tags=["categories"])
+router = APIRouter(prefix="/categories")
 
 # ====== DEPENDENCY INJECTION ======
 
