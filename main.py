@@ -1,13 +1,16 @@
 import logging
 from dotenv import load_dotenv
 from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from database import engine
+import os
 
 # Import all models to register them with SQLAlchemy
 import auth.models as auth_models  # Auth models
 import video.models.video_models as video_models  # Video models
+import streaming.models.streaming_models as streaming_models  # Streaming models
 
 # Load environment variables - override system env vars
 load_dotenv(override=True)
@@ -18,6 +21,7 @@ logger = logging.getLogger(__name__)
 # Create all tables including all module tables
 auth_models.Base.metadata.create_all(bind=engine)
 video_models.Base.metadata.create_all(bind=engine)
+streaming_models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Video Server API")
 
@@ -28,8 +32,6 @@ app.add_middleware(
     allow_methods=["*"], 
     allow_headers=["*"], 
 )
-
-app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Health check endpoint for Docker/Kubernetes
 @app.get("/health")
@@ -73,13 +75,39 @@ try:
 except Exception as e:
     logging.error(f"Failed to load auth router: {e}")
 
-# WebRTC routes (modular)
+# Streaming routes
 try:
-    from webrtc import router as webrtc_router
-    app.include_router(webrtc_router)
-    logging.info("WebRTC router loaded successfully") 
+    from streaming import router as streaming_router
+    app.include_router(streaming_router)
+    logging.info("Streaming router loaded successfully")
 except Exception as e:
-    logging.error(f"Failed to load WebRTC router: {e}")
+    logging.error(f"Failed to load streaming router: {e}")
+
+# Serve HTML files for WebRTC testing
+@app.get("/test_broadcaster.html")
+async def serve_broadcaster():
+    """Serve the test broadcaster HTML page"""
+    return FileResponse("test_broadcaster.html")
+
+@app.get("/test_viewer.html")
+async def serve_viewer():
+    """Serve the test viewer HTML page"""
+    return FileResponse("test_viewer.html")
+
+@app.get("/index.html")
+async def serve_index():
+    """Serve the index HTML page"""
+    return FileResponse("index.html")
+
+@app.get("/broadcaster.html")
+async def serve_broadcaster_full():
+    """Serve the full broadcaster HTML page"""
+    return FileResponse("broadcaster.html")
+
+@app.get("/viewer.html")
+async def serve_viewer_full():
+    """Serve the full viewer HTML page"""
+    return FileResponse("viewer.html")
 
 if __name__ == "__main__":
     import uvicorn
