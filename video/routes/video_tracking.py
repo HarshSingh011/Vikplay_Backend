@@ -18,7 +18,7 @@ from video.schemas.video_schemas import (
 )
 from video.utils import extract_device_info
 
-router = APIRouter(prefix="/track", tags=["tracking"])
+router = APIRouter(prefix="/track")
 
 # ====== DEPENDENCY INJECTION ======
 

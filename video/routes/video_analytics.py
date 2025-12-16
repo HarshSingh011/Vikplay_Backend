@@ -17,7 +17,7 @@ from video.schemas.video_schemas import (
     UserAnalytics, UserVideoHistoryResponse, AnalyticsRequest, UserHistoryRequest
 )
 
-router = APIRouter(prefix="/analytics", tags=["analytics"])
+router = APIRouter(prefix="/analytics")
 
 # ====== DEPENDENCY INJECTION ======
 
