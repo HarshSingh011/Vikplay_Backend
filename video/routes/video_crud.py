@@ -15,7 +15,7 @@ from video.schemas.video_schemas import (
     VideoUpdateWithAuth, VideoDeleteWithAuth
 )
 
-router = APIRouter(prefix="/videos", tags=["videos"])
+router = APIRouter(prefix="/videos")
 
 # ====== DEPENDENCY INJECTION ======
 
