@@ -8,6 +8,7 @@ from datetime import datetime
 from auth.services.base import BaseService, ServiceResult, AuthenticationError, ValidationError, NotFoundError
 from auth.repositories import user_repository
 from auth.utils import password_utils, jwt_utils, email_utils
+from auth.utils.pending_registration import PendingRegistration, RegistrationSession
 from auth.models import User
 
 
@@ -19,7 +20,10 @@ class UserService(BaseService):
         self.user_repo = user_repository
     
     def register_user(self, email: str, username: str, password: str) -> ServiceResult:
-        """Register a new user"""
+        """
+        Register a new user (Step 1: Create pending registration and send OTP)
+        User won't be created in DB until OTP is verified
+        """
         try:
             # Validate input
             if not email or not username or not password:
@@ -34,34 +38,71 @@ class UserService(BaseService):
             if not is_strong:
                 return ServiceResult.error_result("Weak password", password_errors)
             
-            # Check if user already exists
+            # Check if user already exists in database
             existing_user = self.user_repo.get_by_email(self.db, email)
-            if existing_user:
-                return ServiceResult.error_result("Email already registered")
+            if existing_user and existing_user.is_active:
+                return ServiceResult.error_result("Email already registered and active")
             
             existing_username = self.user_repo.get_by_username(self.db, username)
-            if existing_username:
+            if existing_username and existing_username.is_active:
                 return ServiceResult.error_result("Username already taken")
+            
+            # Check if there's a pending registration
+            pending_info = PendingRegistration.get_pending_info(email)
+            if pending_info:
+                resend_count = pending_info['resend_count']
+                time_remaining = pending_info['time_remaining_seconds']
+                
+                return ServiceResult.success_result(
+                    data={
+                        "status": "pending",
+                        "message": "Registration already in progress. Please verify your email.",
+                        "email": email,
+                        "resend_count": resend_count,
+                        "can_resend": True,
+                        "expires_in_seconds": time_remaining
+                    },
+                    message="Registration pending. OTP already sent."
+                )
             
             # Hash password
             hashed_password = password_utils.hash_password(password)
             
-            # Create user
-            user = self.user_repo.create_user(
-                self.db, 
-                email=email, 
-                username=username, 
+            # Create pending registration (stored in Redis)
+            success = PendingRegistration.create_pending_registration(
+                email=email,
+                username=username,
                 hashed_password=hashed_password
             )
             
+            if not success:
+                # Fallback: Create user directly without pending state
+                user = self.user_repo.create_user(
+                    self.db,
+                    email=email,
+                    username=username,
+                    hashed_password=hashed_password
+                )
+                
+                return ServiceResult.success_result(
+                    data={
+                        "user_id": user.id,
+                        "email": user.email,
+                        "username": user.username,
+                        "is_active": user.is_active,
+                        "status": "created_pending_verification"
+                    },
+                    message="User registered. Please verify your email."
+                )
+            
             return ServiceResult.success_result(
                 data={
-                    "user_id": user.id,
-                    "email": user.email,
-                    "username": user.username,
-                    "is_active": user.is_active
+                    "status": "pending",
+                    "email": email,
+                    "username": username,
+                    "message": "Registration initiated. Please verify OTP sent to your email."
                 },
-                message="User registered successfully. Please verify your email."
+                message="Registration initiated successfully. Check your email for OTP."
             )
             
         except Exception as e:
