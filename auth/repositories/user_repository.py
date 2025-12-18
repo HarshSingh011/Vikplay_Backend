@@ -22,6 +22,10 @@ class UserRepository(SQLAlchemyRepository[User]):
         """Get user by username"""
         return self.get_by_field(db, "username", username)
     
+    def get_by_phone(self, db: Session, phone_number: str) -> Optional[User]:
+        """Get user by phone number"""
+        return self.get_by_field(db, "phone_number", phone_number)
+    
     def create_user(self, db: Session, email: str, username: str, hashed_password: str) -> User:
         """Create a new user with unique constraint handling"""
         try:

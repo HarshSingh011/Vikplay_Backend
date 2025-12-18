@@ -11,6 +11,7 @@ import os
 import auth.models as auth_models  # Auth models
 import video.models.video_models as video_models  # Video models
 import streaming.models.streaming_models as streaming_models  # Streaming models
+import call.models.call_models as call_models  # Call models
 
 # Load environment variables - override system env vars
 load_dotenv(override=True)
@@ -22,6 +23,7 @@ logger = logging.getLogger(__name__)
 auth_models.Base.metadata.create_all(bind=engine)
 video_models.Base.metadata.create_all(bind=engine)
 streaming_models.Base.metadata.create_all(bind=engine)
+call_models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Video Server API")
 
@@ -82,6 +84,14 @@ try:
     logging.info("Streaming router loaded successfully")
 except Exception as e:
     logging.error(f"Failed to load streaming router: {e}")
+
+# Call routes
+try:
+    from call.routes import call_router
+    app.include_router(call_router)
+    logging.info("Call router loaded successfully")
+except Exception as e:
+    logging.error(f"Failed to load call router: {e}")
 
 # Serve HTML files for WebRTC testing
 @app.get("/test_broadcaster.html")
