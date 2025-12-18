@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebRTC Viewer - With JWT Auth</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            max-width: 900px; 
+            margin: 50px auto; 
+            padding: 20px; 
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        h1 { color: #333; margin-top: 0; }
+        .auth-section {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+        input[type="text"], input[type="number"], input[type="password"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        video { 
+            width: 100%; 
+            max-width: 640px; 
+            background: #000; 
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        button { 
+            padding: 12px 24px; 
+            margin: 10px 5px; 
+            font-size: 16px; 
+            cursor: pointer; 
+            border-radius: 5px;
+            border: none;
+            transition: all 0.3s;
+        }
+        button:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.2); }
+        .btn-login { background: #3b82f6; color: white; }
+        .btn-join { background: #10b981; color: white; }
+        .btn-leave { background: #ef4444; color: white; }
+        .btn-skip { background: #6b7280; color: white; font-size: 12px; padding: 8px 16px; }
+        .status { 
+            padding: 15px; 
+            margin: 15px 0; 
+            border-radius: 5px; 
+            font-weight: bold;
+            text-align: center;
+        }
+        .watching { background: #d1fae5; color: #065f46; }
+        .offline { background: #fee2e2; color: #991b1b; }
+        .authenticated { background: #dbeafe; color: #1e40af; }
+        .anonymous { background: #fef3c7; color: #92400e; }
+        #log { 
+            background: #1f2937; 
+            color: #60a5fa; 
+            padding: 15px; 
+            border-radius: 5px; 
+            height: 200px; 
+            overflow-y: auto; 
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .stat-card {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #f5576c;
+        }
+        .stat-label {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📺 WebRTC Viewer (JWT Auth)</h1>
+        
+        <!-- Authentication Section -->
+        <div class="auth-section" id="authSection">
+            <h3>🔐 Authentication (Optional)</h3>
+            <p><small>You can watch as authenticated user or as anonymous viewer</small></p>
+            
+            <div class="form-group">
+                <label>Email:</label>
+                <input type="text" id="email" placeholder="your@email.com">
+            </div>
+            <div class="form-group">
+                <label>Password:</label>
+                <input type="password" id="password" placeholder="Your password">
+            </div>
+            <button class="btn-login" onclick="login()">🔑 Login & Watch</button>
+            <button class="btn-skip" onclick="skipAuth()">⏭️ Skip (Watch Anonymously)</button>
+            
+            <div style="margin-top: 10px;">
+                <small>Or paste JWT token directly:</small>
+                <input type="text" id="jwtToken" placeholder="Paste JWT token here (optional)">
+            </div>
+        </div>
+
+        <div id="authStatus" class="status offline" style="display:none;">Not Connected</div>
+        
+        <!-- Viewing Section -->
+        <div id="viewingSection" style="display:none;">
+            <div class="form-group">
+                <label>Stream ID:</label>
+                <input type="number" id="streamId" value="1">
+            </div>
+            
+            <div id="viewStatus" class="status offline">⚫ Not Watching</div>
+            
+            <video id="remoteVideo" autoplay playsinline controls></video>
+            
+            <div>
+                <button class="btn-join" onclick="joinStream()">▶️ Join Stream</button>
+                <button class="btn-leave" onclick="leaveStream()">⏹️ Leave Stream</button>
+            </div>
+            
+            <div class="stats">
+                <div class="stat-card">
+                    <div class="stat-value" id="connection">Disconnected</div>
+                    <div class="stat-label">CONNECTION</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="watchtime">00:00</div>
+                    <div class="stat-label">WATCH TIME</div>
+                </div>
+            </div>
+        </div>
+        
+        <h3>📊 Console:</h3>
+        <div id="log"></div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:8000';
+        const WS_URL = 'ws://localhost:8000';
+        
+        let jwtToken = null;
+        let isAnonymous = false;
+        let websocket = null;
+        let peerConnection = null;
+        let watchStartTime = null;
+        let watchtimeInterval = null;
+        
+        const rtcConfig = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' }
+            ]
+        };
+        
+        function log(msg, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const time = new Date().toLocaleTimeString();
+            const color = type === 'error' ? '#ef4444' : type === 'success' ? '#10b981' : '#60a5fa';
+            logDiv.innerHTML += `<span style="color:${color}">[${time}] ${msg}</span><br>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(msg);
+        }
+        
+        async function login() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            
+            if (!email || !password) {
+                log('❌ Please enter email and password', 'error');
+                return;
+            }
+            
+            try {
+                log('🔐 Logging in...');
+                
+                const response = await fetch(`${API_URL}/api/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ email, password })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.access_token) {
+                    jwtToken = data.access_token;
+                    isAnonymous = false;
+                    document.getElementById('jwtToken').value = jwtToken;
+                    
+                    log('✅ Login successful!', 'success');
+                    log(`👤 Logged in as: ${email}`);
+                    
+                    showViewingSection(false);
+                } else {
+                    log(`❌ Login failed: ${data.detail || data.message || 'Unknown error'}`, 'error');
+                }
+            } catch (error) {
+                log(`❌ Login error: ${error.message}`, 'error');
+            }
+        }
+        
+        function skipAuth() {
+            isAnonymous = true;
+            jwtToken = null;
+            log('✅ Proceeding as anonymous viewer', 'success');
+            showViewingSection(true);
+        }
+        
+        function showViewingSection(anonymous) {
+            // Show status
+            document.getElementById('authStatus').style.display = 'block';
+            if (anonymous) {
+                document.getElementById('authStatus').className = 'status anonymous';
+                document.getElementById('authStatus').textContent = '👤 Anonymous Viewer';
+            } else {
+                document.getElementById('authStatus').className = 'status authenticated';
+                document.getElementById('authStatus').textContent = '✅ Authenticated Viewer';
+            }
+            
+            // Show viewing section
+            document.getElementById('viewingSection').style.display = 'block';
+            
+            // Hide auth section
+            document.getElementById('authSection').style.display = 'none';
+        }
+        
+        // Allow using pasted JWT token
+        document.getElementById('jwtToken').addEventListener('input', (e) => {
+            if (e.target.value.length > 20) {
+                jwtToken = e.target.value;
+                isAnonymous = false;
+                log('✅ JWT token set from paste', 'success');
+                showViewingSection(false);
+            }
+        });
+        
+        async function joinStream() {
+            const streamId = document.getElementById('streamId').value;
+            
+            try {
+                // Build WebSocket URL
+                let wsUrl = `${WS_URL}/api/webrtc/ws/view/${streamId}`;
+                if (jwtToken) {
+                    wsUrl += `?token=${jwtToken}`;
+                    log('🔌 Connecting as authenticated viewer...');
+                } else {
+                    log('🔌 Connecting as anonymous viewer...');
+                }
+                
+                websocket = new WebSocket(wsUrl);
+                
+                websocket.onopen = async () => {
+                    log('✅ WebSocket connected!', 'success');
+                    document.getElementById('viewStatus').className = 'status watching';
+                    document.getElementById('viewStatus').textContent = '📺 Watching Stream';
+                    document.getElementById('connection').textContent = 'Connected';
+                    
+                    // Start watch time counter
+                    watchStartTime = Date.now();
+                    updateWatchtime();
+                    watchtimeInterval = setInterval(updateWatchtime, 1000);
+                    
+                    // Create peer connection and send offer
+                    await createPeerConnection();
+                };
+                
+                websocket.onmessage = async (event) => {
+                    const data = JSON.parse(event.data);
+                    await handleSignal(data);
+                };
+                
+                websocket.onerror = (error) => {
+                    log(`❌ WebSocket error: ${error}`, 'error');
+                };
+                
+                websocket.onclose = (event) => {
+                    log(`🔌 WebSocket closed (Code: ${event.code}, Reason: ${event.reason || 'None'})`);
+                    document.getElementById('viewStatus').className = 'status offline';
+                    document.getElementById('viewStatus').textContent = '⚫ Not Watching';
+                    document.getElementById('connection').textContent = 'Disconnected';
+                    
+                    if (watchtimeInterval) {
+                        clearInterval(watchtimeInterval);
+                        watchtimeInterval = null;
+                    }
+                };
+                
+            } catch (error) {
+                log(`❌ Error: ${error.message}`, 'error');
+            }
+        }
+        
+        async function createPeerConnection() {
+            peerConnection = new RTCPeerConnection(rtcConfig);
+            
+            // Handle remote stream
+            peerConnection.ontrack = (event) => {
+                log('📺 Receiving stream!', 'success');
+                document.getElementById('remoteVideo').srcObject = event.streams[0];
+            };
+            
+            // Handle ICE candidates
+            peerConnection.onicecandidate = (event) => {
+                if (event.candidate && websocket) {
+                    websocket.send(JSON.stringify({
+                        type: 'ice_candidate',
+                        candidate: event.candidate
+                    }));
+                }
+            };
+            
+            peerConnection.onconnectionstatechange = () => {
+                const state = peerConnection.connectionState;
+                log(`🔗 Connection state: ${state}`);
+                document.getElementById('connection').textContent = state.charAt(0).toUpperCase() + state.slice(1);
+                
+                if (state === 'connected') {
+                    log('✅ Peer connection established!', 'success');
+                }
+            };
+            
+            // Create and send offer
+            try {
+                const offer = await peerConnection.createOffer();
+                await peerConnection.setLocalDescription(offer);
+                
+                websocket.send(JSON.stringify({
+                    type: 'offer',
+                    offer: offer
+                }));
+                
+                log('📤 Sent offer to broadcaster');
+            } catch (error) {
+                log(`❌ Error creating offer: ${error.message}`, 'error');
+            }
+        }
+        
+        async function handleSignal(data) {
+            log(`📨 Received: ${data.type}`);
+            
+            if (data.type === 'answer') {
+                try {
+                    await peerConnection.setRemoteDescription(data.answer);
+                    log('✅ Answer received from broadcaster!', 'success');
+                } catch (error) {
+                    log(`❌ Error setting remote description: ${error.message}`, 'error');
+                }
+            }
+            else if (data.type === 'ice_candidate') {
+                if (peerConnection && data.candidate) {
+                    try {
+                        await peerConnection.addIceCandidate(data.candidate);
+                        log('✅ Added ICE candidate');
+                    } catch (error) {
+                        log(`❌ Error adding ICE candidate: ${error.message}`, 'error');
+                    }
+                }
+            }
+            else if (data.type === 'error') {
+                log(`❌ Server error: ${data.message}`, 'error');
+            }
+        }
+        
+        function updateWatchtime() {
+            if (!watchStartTime) return;
+            
+            const elapsed = Math.floor((Date.now() - watchStartTime) / 1000);
+            const minutes = Math.floor(elapsed / 60);
+            const seconds = elapsed % 60;
+            document.getElementById('watchtime').textContent = 
+                `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        }
+        
+        function leaveStream() {
+            if (websocket) {
+                websocket.close();
+                websocket = null;
+            }
+            
+            if (peerConnection) {
+                peerConnection.close();
+                peerConnection = null;
+            }
+            
+            if (watchtimeInterval) {
+                clearInterval(watchtimeInterval);
+                watchtimeInterval = null;
+            }
+            
+            document.getElementById('remoteVideo').srcObject = null;
+            document.getElementById('watchtime').textContent = '00:00';
+            document.getElementById('connection').textContent = 'Disconnected';
+            
+            log('⏹️ Left stream', 'success');
+        }
+        
+        // Initialize
+        log('🚀 WebRTC Viewer with JWT Authentication ready!');
+        log('💡 You can watch as authenticated user or anonymously');
+    </script>
+</body>
+</html>
