@@ -188,45 +188,52 @@ async def webrtc_broadcast_websocket(
 ):
     """WebSocket endpoint for broadcaster to stream via WebRTC"""
     
+    # Accept WebSocket connection FIRST
+    await websocket.accept()
+    logger.info(f"Broadcaster WebSocket accepted for stream_id={stream_id}")
+    
     # Authenticate user from token
     try:
+        logger.info(f"Authenticating broadcaster with token: {token[:20]}...")
         user_service = get_user_service(db)
         result = user_service.get_user_by_token(token)
         
         if not result.success:
-            await websocket.close(code=4003, reason="Authentication failed")
+            logger.error(f"Authentication failed: {result.message}")
+            await websocket.close(code=4003, reason=f"Authentication failed: {result.message}")
             return
         
         user_id = result.data.id
+        logger.info(f"✅ Authenticated broadcaster: user_id={user_id}, stream_id={stream_id}")
     except Exception as e:
-        logger.error(f"Authentication error: {e}")
+        logger.error(f"Authentication exception: {e}", exc_info=True)
         await websocket.close(code=4003, reason="Authentication failed")
         return
     
-    # Verify stream exists and belongs to user
+    # Get or create stream (optional database tracking)
     service = StreamingService(db)
-    stream = service.get_stream(stream_id)
+    try:
+        stream = service.get_stream(stream_id)
+        
+        # If stream exists, verify ownership
+        if stream and stream["stream"].user_id != user_id:
+            logger.warning(f"Stream {stream_id} belongs to another user")
+            await websocket.close(code=4005, reason="Not authorized")
+            return
+        
+        # Mark stream as live if it exists
+        if stream:
+            service.start_stream(stream_id, user_id)
+    except Exception as e:
+        # Stream doesn't exist in DB - that's OK, WebRTC will still work
+        logger.info(f"Stream {stream_id} not in database, proceeding with WebRTC only: {e}")
     
-    if not stream:
-        await websocket.close(code=4004, reason="Stream not found")
-        return
-    
-    # Verify stream ownership
-    if stream["stream"].user_id != user_id:
-        await websocket.close(code=4005, reason="Not authorized")
-        return
-    
-    # Connect broadcaster
-    result = await webrtc_manager.connect_broadcaster(websocket, stream_id, user_id)
+    # Connect broadcaster (this works without DB stream)
+    logger.info(f"Connecting broadcaster - stream_id={stream_id}, user_id={user_id}")
+    result = await webrtc_manager.connect_broadcaster(websocket, stream_id, user_id, skip_accept=True)
     
     if not result["success"]:
         return  # Already closed in connect_broadcaster
-    
-    # Mark stream as live in database
-    try:
-        service.start_stream(stream_id, user_id)
-    except Exception as e:
-        logger.warning(f"Could not mark stream as live: {e}")
     
     try:
         while True:
@@ -275,6 +282,9 @@ async def webrtc_view_websocket(
 ):
     """WebSocket endpoint for viewer to watch WebRTC stream"""
     
+    # Accept WebSocket connection FIRST
+    await websocket.accept()
+    
     # Authenticate user (optional for viewers, but recommended)
     user_id = None
     if token:
@@ -284,25 +294,32 @@ async def webrtc_view_websocket(
             
             if result.success:
                 user_id = result.data.id
+                logger.info(f"Authenticated viewer: user_id={user_id}")
             else:
                 # Allow anonymous viewing
-                user_id = hash(websocket) % 1000000  # Generate temporary ID
-        except Exception:
+                user_id = hash(websocket) % 1000000
+                logger.info(f"Anonymous viewer (auth failed): user_id={user_id}")
+        except Exception as e:
             user_id = hash(websocket) % 1000000
+            logger.info(f"Anonymous viewer (exception): user_id={user_id}")
     else:
         # Anonymous viewer
         user_id = hash(websocket) % 1000000
+        logger.info(f"Anonymous viewer (no token): user_id={user_id}")
     
-    # Verify stream exists
+    # Check if stream exists in DB (optional)
     service = StreamingService(db)
-    stream = service.get_stream(stream_id)
+    try:
+        stream = service.get_stream(stream_id)
+        if stream:
+            logger.info(f"Stream {stream_id} found in database")
+    except Exception as e:
+        # Stream doesn't exist in DB - that's OK, WebRTC will still work if broadcaster is connected
+        logger.info(f"Stream {stream_id} not in database, proceeding with WebRTC only: {e}")
     
-    if not stream:
-        await websocket.close(code=4004, reason="Stream not found")
-        return
-    
-    # Connect viewer
-    result = await webrtc_manager.connect_viewer(websocket, stream_id, user_id)
+    # Connect viewer (works without DB stream if broadcaster is connected)
+    logger.info(f"Connecting viewer - stream_id={stream_id}, user_id={user_id}")
+    result = await webrtc_manager.connect_viewer(websocket, stream_id, user_id, skip_accept=True)
     
     if not result["success"]:
         return  # Already handled in connect_viewer

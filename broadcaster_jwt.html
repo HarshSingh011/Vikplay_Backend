@@ -205,7 +205,7 @@
             try {
                 log('🔐 Logging in...');
                 
-                const response = await fetch(`${API_URL}/api/auth/login`, {
+                const response = await fetch(`${API_URL}/auth/login`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -274,6 +274,7 @@
                 // Connect to WebSocket WITH JWT token
                 const wsUrl = `${WS_URL}/api/webrtc/ws/broadcast/${streamId}?token=${jwtToken}`;
                 log(`🔌 Connecting to WebSocket...`);
+                log(`🔑 Using token: ${jwtToken.substring(0, 50)}...`);
                 
                 websocket = new WebSocket(wsUrl);
                 
@@ -351,7 +352,7 @@
                 if (event.candidate && websocket) {
                     websocket.send(JSON.stringify({
                         type: 'ice_candidate',
-                        target_id: viewerId,
+                        target: viewerId,  // Server expects 'target', not 'target_id'
                         candidate: event.candidate
                     }));
                 }
@@ -383,7 +384,7 @@
                 
                 websocket.send(JSON.stringify({
                     type: 'answer',
-                    target_id: viewerId,
+                    target: viewerId,  // Server expects 'target', not 'target_id'
                     answer: answer
                 }));
                 

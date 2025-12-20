@@ -119,6 +119,16 @@ async def serve_viewer_full():
     """Serve the full viewer HTML page"""
     return FileResponse("viewer.html")
 
+@app.get("/broadcaster_jwt.html")
+async def serve_broadcaster_jwt():
+    """Serve the JWT broadcaster HTML page"""
+    return FileResponse("broadcaster_jwt.html")
+
+@app.get("/viewer_jwt.html")
+async def serve_viewer_jwt():
+    """Serve the JWT viewer HTML page"""
+    return FileResponse("viewer_jwt.html")
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(

@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket Test</title>
+</head>
+<body>
+    <h1>WebSocket Connection Test</h1>
+    <button onclick="testBroadcaster()">Test Broadcaster WebSocket</button>
+    <button onclick="testViewer()">Test Viewer WebSocket</button>
+    <div id="log" style="margin-top:20px; padding:10px; background:#f0f0f0; font-family:monospace;"></div>
+
+    <script>
+        const WS_URL = 'ws://localhost:8000';
+        const JWT_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJib2RldGE4MTM2QG11Y2F0ZS5jb20iLCJleHAiOjE3NjYwNTU1MTh9.tWq3NB3_KJ7y0Mb4hZnOMc9sPTDTONhF5GBPO8qLvbc';
+        
+        function log(msg) {
+            const logDiv = document.getElementById('log');
+            const time = new Date().toLocaleTimeString();
+            logDiv.innerHTML += `[${time}] ${msg}<br>`;
+            console.log(msg);
+        }
+        
+        function testBroadcaster() {
+            log('🔌 Testing broadcaster WebSocket...');
+            const wsUrl = `${WS_URL}/api/webrtc/ws/broadcast/1?token=${JWT_TOKEN}`;
+            log(`URL: ${wsUrl}`);
+            
+            const ws = new WebSocket(wsUrl);
+            
+            ws.onopen = () => {
+                log('✅ Broadcaster WebSocket OPENED!');
+                ws.close();
+            };
+            
+            ws.onerror = (error) => {
+                log(`❌ Broadcaster WebSocket ERROR: ${JSON.stringify(error)}`);
+                console.error('Full error:', error);
+            };
+            
+            ws.onclose = (event) => {
+                log(`🔌 Broadcaster WebSocket CLOSED - Code: ${event.code}, Reason: ${event.reason || 'None'}, Clean: ${event.wasClean}`);
+            };
+        }
+        
+        function testViewer() {
+            log('🔌 Testing viewer WebSocket...');
+            const wsUrl = `${WS_URL}/api/webrtc/ws/view/1?token=${JWT_TOKEN}`;
+            log(`URL: ${wsUrl}`);
+            
+            const ws = new WebSocket(wsUrl);
+            
+            ws.onopen = () => {
+                log('✅ Viewer WebSocket OPENED!');
+                ws.close();
+            };
+            
+            ws.onerror = (error) => {
+                log(`❌ Viewer WebSocket ERROR: ${JSON.stringify(error)}`);
+                console.error('Full error:', error);
+            };
+            
+            ws.onclose = (event) => {
+                log(`🔌 Viewer WebSocket CLOSED - Code: ${event.code}, Reason: ${event.reason || 'None'}, Clean: ${event.wasClean}`);
+            };
+        }
+    </script>
+</body>
+</html>

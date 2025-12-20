@@ -167,23 +167,17 @@ class UserService(BaseService):
             if not payload:
                 return ServiceResult.error_result("Invalid or expired token")
             
-            # Get user
-            user_id = payload.get("sub")
-            user = self.user_repo.get(self.db, user_id)
+            # Get user by email (token contains email in 'sub' field)
+            user_email = payload.get("sub")
+            if not user_email:
+                return ServiceResult.error_result("Invalid token payload")
+            
+            user = self.user_repo.get_by_email(self.db, user_email)
             if not user:
                 return ServiceResult.error_result("User not found")
             
-            return ServiceResult.success_result(
-                data={
-                    "id": user.id,
-                    "email": user.email,
-                    "username": user.username,
-                    "is_active": user.is_active,
-                    "is_verified": user.is_verified,
-                    "created_at": user.created_at.isoformat(),
-                    "last_login": user.last_login.isoformat() if user.last_login else None
-                }
-            )
+            # Return the actual User object instead of a dict
+            return ServiceResult.success_result(data=user)
             
         except Exception as e:
             return ServiceResult.error_result(f"Failed to get user: {str(e)}")

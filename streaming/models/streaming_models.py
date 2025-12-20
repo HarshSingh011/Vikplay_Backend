@@ -9,7 +9,7 @@ class Stream(Base):
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String, index=True)
     description = Column(Text, nullable=True)
-    user_id = Column(String, ForeignKey("users.id"), unique=True, index=True)  # One stream per user
+    user_id = Column(Integer, ForeignKey("users.id"), unique=True, index=True)  # One stream per user
     stream_key = Column(String, unique=True, index=True)
     is_live = Column(Boolean, default=False)
     viewer_count = Column(Integer, default=0)
@@ -29,7 +29,7 @@ class StreamChatMessage(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     message = Column(Text)
-    user_id = Column(String, ForeignKey("users.id"), index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True)
     username = Column(String)
     stream_id = Column(Integer, ForeignKey("streams.id"))
     created_at = Column(DateTime(timezone=True), server_default=func.now())

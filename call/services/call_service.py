@@ -28,7 +28,7 @@ class CallService:
     def __init__(self, db: Session):
         self.db = db
         self.call_repo = CallRepository(db)
-        self.user_repo = UserRepository(db)
+        self.user_repo = UserRepository()
 
     def create_call(
         self,
