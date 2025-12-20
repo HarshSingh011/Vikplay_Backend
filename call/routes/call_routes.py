@@ -291,8 +291,7 @@ async def get_call_history(
 @router.websocket("/ws")
 async def websocket_endpoint(
     websocket: WebSocket,
-    token: str,
-    db: Session = Depends(get_db)
+    token: str
 ):
     """
     WebSocket endpoint for WebRTC signaling.

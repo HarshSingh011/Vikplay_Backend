@@ -36,10 +36,12 @@ class WebRTCManager:
         self, 
         websocket: WebSocket, 
         stream_id: int, 
-        user_id: int
+        user_id: int,
+        skip_accept: bool = False
     ) -> Dict[str, any]:
         """Connect a broadcaster to start streaming"""
-        await websocket.accept()
+        if not skip_accept:
+            await websocket.accept()
         
         # Check if user already has an active stream
         if user_id in self.active_streams_by_user:
@@ -78,10 +80,12 @@ class WebRTCManager:
         self, 
         websocket: WebSocket, 
         stream_id: int, 
-        user_id: int
+        user_id: int,
+        skip_accept: bool = False
     ) -> Dict[str, any]:
         """Connect a viewer to watch a stream"""
-        await websocket.accept()
+        if not skip_accept:
+            await websocket.accept()
         
         # Check if broadcaster is active
         if stream_id not in self.broadcasters:
@@ -109,7 +113,14 @@ class WebRTCManager:
             "type": "connected",
             "role": "viewer",
             "stream_id": stream_id,
+            "viewer_id": user_id,  # Include viewer's user_id
             "viewer_count": len(self.viewers[stream_id])
+        })
+        
+        # Notify broadcaster about new viewer
+        await self.send_to_broadcaster(stream_id, {
+            "type": "new_viewer",
+            "viewer_id": user_id
         })
         
         # Update broadcaster with new viewer count
@@ -160,6 +171,12 @@ class WebRTCManager:
             if stream_id in self.viewers:
                 self.viewers[stream_id].discard(connection)
                 
+                # Notify broadcaster that viewer left
+                asyncio.create_task(self.send_to_broadcaster(stream_id, {
+                    "type": "viewer_left",
+                    "viewer_id": user_id
+                }))
+                
                 if not self.viewers[stream_id]:
                     del self.viewers[stream_id]
                 else:
@@ -184,11 +201,11 @@ class WebRTCManager:
         
         if connection.role == 'broadcaster':
             # Broadcaster -> Viewer signals (answer, ice_candidate)
-            target_peer_id = data.get("target")
+            target_viewer_id = data.get("target")
             
             if signal_type in ['answer', 'ice_candidate']:
-                # Send to specific viewer
-                await self.send_to_viewer(stream_id, target_peer_id, data)
+                # Send to specific viewer by user_id
+                await self.send_to_viewer(stream_id, target_viewer_id, data)
         
         elif connection.role == 'viewer':
             # Viewer -> Broadcaster signals (offer, ice_candidate)
@@ -209,19 +226,23 @@ class WebRTCManager:
             logger.error(f"Error sending to broadcaster: {e}")
             self.disconnect(broadcaster.websocket)
 
-    async def send_to_viewer(self, stream_id: int, peer_id: str, message: dict):
-        """Send a message to a specific viewer"""
+    async def send_to_viewer(self, stream_id: int, user_id: int, message: dict):
+        """Send a message to a specific viewer by user_id"""
         if stream_id not in self.viewers:
+            logger.warning(f"No viewers for stream {stream_id}")
             return
         
         for viewer in self.viewers[stream_id]:
-            if viewer.peer_id == peer_id:
+            if viewer.user_id == user_id:
                 try:
                     await viewer.websocket.send_json(message)
+                    logger.info(f"Sent message to viewer user_id={user_id}, type={message.get('type')}")
                 except Exception as e:
                     logger.error(f"Error sending to viewer: {e}")
                     self.disconnect(viewer.websocket)
-                break
+                return
+        
+        logger.warning(f"Viewer user_id={user_id} not found in stream {stream_id}")
 
     async def broadcast_to_viewers(self, stream_id: int, message: dict):
         """Broadcast a message to all viewers of a stream"""
