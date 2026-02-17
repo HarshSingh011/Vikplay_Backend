@@ -49,3 +49,4 @@ celerybeat.pid
 
 # Redis
 dump.rdb
+.env
