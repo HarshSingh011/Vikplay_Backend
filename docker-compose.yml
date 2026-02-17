@@ -10,7 +10,7 @@ services:
       - DATABASE_URL=sqlite:///./data/vidplay.db
       - SECRET_KEY=${SECRET_KEY:-your-super-secret-development-key}
       - ALGORITHM=HS256
-      - ACCESS_TOKEN_EXPIRE_MINUTES=30
+      - ACCESS_TOKEN_EXPIRE_MINUTES=1440
       - EMAIL_USERNAME=${EMAIL_USERNAME}
       - EMAIL_PASSWORD=${EMAIL_PASSWORD}
       - R2_ACCOUNT_ID=${R2_ACCOUNT_ID}

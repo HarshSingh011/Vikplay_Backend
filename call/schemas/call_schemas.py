@@ -75,6 +75,11 @@ class CallEnd(BaseModel):
     call_id: str = Field(..., description="ID of the call")
 
 
+class GroupCallCreate(BaseModel):
+    """Schema for creating a group call by user IDs."""
+    user_ids: List[str] = Field(..., min_length=1, description="User IDs to call")
+
+
 class SessionDescription(BaseModel):
     """WebRTC Session Description (SDP)."""
     type: str = Field(..., description="SDP type: offer or answer")

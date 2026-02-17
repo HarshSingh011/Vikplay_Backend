@@ -89,6 +89,137 @@ class CallService:
         
         return call
 
+    def create_direct_call(
+        self,
+        caller_id: str,
+        callee_id: str
+    ) -> Call:
+        """
+        Create a direct one-on-one call between two users (WhatsApp-style).
+        
+        Args:
+            caller_id: ID of the user initiating the call
+            callee_id: ID of the user being called
+            
+        Returns:
+            Created call with participants
+        """
+        # Create the call
+        call = self.call_repo.create_call(
+            status=CallStatusEnum.INITIATED,
+            is_group_call=False
+        )
+        
+        # Add the caller as initiator
+        self.call_repo.add_participant(
+            call_id=call.id,
+            user_id=caller_id,
+            role=ParticipantRoleEnum.INITIATOR,
+            status=ParticipantStatusEnum.JOINED
+        )
+        
+        # Add the callee as invitee
+        self.call_repo.add_participant(
+            call_id=call.id,
+            user_id=callee_id,
+            role=ParticipantRoleEnum.INVITEE,
+            invited_by_user_id=caller_id,
+            status=ParticipantStatusEnum.INVITED
+        )
+        
+        # Update call status to ringing
+        call = self.call_repo.update_call_status(call.id, CallStatusEnum.RINGING)
+        
+        return call
+
+    def create_group_call_by_ids(
+        self,
+        caller_id: str,
+        user_ids: list
+    ) -> Call:
+        """
+        Create a group call by user IDs.
+        
+        Args:
+            caller_id: ID of the user initiating the call
+            user_ids: List of user IDs to invite
+            
+        Returns:
+            Created call with participants
+        """
+        is_group_call = len(user_ids) > 1
+        
+        call = self.call_repo.create_call(
+            status=CallStatusEnum.INITIATED,
+            is_group_call=is_group_call
+        )
+        
+        # Add the caller as initiator
+        self.call_repo.add_participant(
+            call_id=call.id,
+            user_id=caller_id,
+            role=ParticipantRoleEnum.INITIATOR,
+            status=ParticipantStatusEnum.JOINED
+        )
+        
+        # Add invitees
+        for uid in user_ids:
+            if str(uid) == str(caller_id):
+                continue
+            self.call_repo.add_participant(
+                call_id=call.id,
+                user_id=uid,
+                role=ParticipantRoleEnum.INVITEE,
+                invited_by_user_id=caller_id,
+                status=ParticipantStatusEnum.INVITED
+            )
+        
+        call = self.call_repo.update_call_status(call.id, CallStatusEnum.RINGING)
+        return call
+
+    def add_user_to_existing_call(
+        self,
+        adder_id: str,
+        call_id: str,
+        user_id: str
+    ) -> Call:
+        """
+        Add a single user to an existing (active/ringing) call.
+        Any current participant can add someone new.
+        Automatically promotes a 1-on-1 call to a group call.
+        """
+        call = self.call_repo.get_call_by_id(call_id)
+        if not call:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Call not found")
+
+        # Verify adder is a participant
+        adder = self.call_repo.get_participant(call_id, adder_id)
+        if not adder:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not in this call")
+
+        if call.status not in [CallStatusEnum.RINGING, CallStatusEnum.ACTIVE, CallStatusEnum.INITIATED]:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Call is not active")
+
+        # Check if already a participant
+        if self.call_repo.participant_exists(call_id, user_id):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="User already in this call")
+
+        self.call_repo.add_participant(
+            call_id=call_id,
+            user_id=user_id,
+            role=ParticipantRoleEnum.INVITEE,
+            invited_by_user_id=adder_id,
+            status=ParticipantStatusEnum.INVITED
+        )
+
+        # Promote to group call if 3+ participants now
+        call = self.call_repo.get_call_by_id(call_id)
+        if not call.is_group_call and len(call.participants) > 2:
+            call.is_group_call = True
+            self.db.commit()
+
+        return call
+
     def invite_participants(
         self,
         current_user_id: str,
