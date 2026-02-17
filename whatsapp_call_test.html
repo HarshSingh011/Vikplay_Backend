@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Call - VikPay</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #0b141a; color: #e9edef;
+            height: 100vh; overflow: hidden;
+        }
+        .app { display: grid; grid-template-columns: 340px 1fr; height: 100vh; }
+
+        /* ── Sidebar ── */
+        .sidebar { background: #111b21; border-right: 1px solid #2a3942; display: flex; flex-direction: column; overflow: hidden; }
+        .sidebar-header { background: #202c33; padding: 14px; border-bottom: 1px solid #2a3942; }
+        .sidebar-header h2 { font-size: 1.15em; margin-bottom: 8px; }
+        .auth-input { width: 100%; padding: 7px 10px; background: #2a3942; border: 1px solid #3b4a54; border-radius: 8px; color: #e9edef; font-size: 12px; resize: none; }
+        .auth-input::placeholder { color: #8696a0; }
+        .btn-primary { width: 100%; padding: 9px; margin-top: 6px; background: #00a884; border: none; border-radius: 8px; color: #fff; font-weight: 600; cursor: pointer; }
+        .btn-primary:hover:not(:disabled) { background: #06cf9c; }
+        .btn-primary:disabled { background: #3b4a54; cursor: not-allowed; }
+        .conn-status { margin-top: 5px; font-size: 11px; color: #8696a0; min-height: 14px; }
+
+        .search-box { padding: 8px 14px; border-bottom: 1px solid #2a3942; }
+        .search-input { width: 100%; padding: 7px 12px; background: #202c33; border: 1px solid #3b4a54; border-radius: 8px; color: #e9edef; font-size: 13px; }
+
+        /* Group call bar */
+        .group-bar { display: none; padding: 10px 14px; background: #1a2730; border-bottom: 1px solid #2a3942; align-items: center; gap: 10px; }
+        .group-bar.show { display: flex; }
+        .group-bar span { flex: 1; font-size: 13px; color: #00a884; font-weight: 600; }
+        .group-bar button { padding: 8px 16px; background: #00a884; border: none; border-radius: 8px; color: #fff; font-weight: 600; cursor: pointer; font-size: 13px; }
+        .group-bar button:hover { background: #06cf9c; }
+
+        .user-list { flex: 1; overflow-y: auto; }
+        .user-list::-webkit-scrollbar { width: 5px; }
+        .user-list::-webkit-scrollbar-thumb { background: #3b4a54; border-radius: 3px; }
+
+        .user-item { display: flex; align-items: center; padding: 10px 14px; border-bottom: 1px solid rgba(42,57,66,.35); transition: background .15s; }
+        .user-item:hover { background: #202c33; }
+        .user-cb { width: 18px; height: 18px; margin-right: 10px; accent-color: #00a884; cursor: pointer; flex-shrink: 0; }
+        .user-avatar { width: 42px; height: 42px; border-radius: 50%; background: linear-gradient(135deg, #667eea, #764ba2); display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 17px; margin-right: 10px; flex-shrink: 0; }
+        .user-info { flex: 1; min-width: 0; }
+        .user-name { font-weight: 500; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .user-sub { font-size: 11px; color: #8696a0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .call-icon-btn { width: 36px; height: 36px; border-radius: 50%; border: none; background: #00a884; color: #fff; font-size: 16px; cursor: pointer; flex-shrink: 0; transition: transform .15s; }
+        .call-icon-btn:hover { transform: scale(1.1); }
+        .empty-msg { padding: 24px; text-align: center; color: #8696a0; font-size: 13px; }
+
+        /* ── Main ── */
+        .main { display: flex; flex-direction: column; position: relative; background: #0b141a; }
+        .idle { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; }
+        .idle .icon { font-size: 56px; opacity: .5; }
+        .idle .text { color: #8696a0; font-size: 15px; }
+
+        /* ── Video Grid ── */
+        .video-area { flex: 1; display: none; position: relative; background: #000; }
+        .video-area.active { display: flex; }
+
+        .video-grid { display: grid; width: 100%; height: 100%; gap: 2px; background: #111; }
+        .video-grid[data-count="1"] { grid-template-columns: 1fr; }
+        .video-grid[data-count="2"] { grid-template-columns: 1fr 1fr; }
+        .video-grid[data-count="3"] { grid-template-columns: 1fr 1fr; }
+        .video-grid[data-count="4"] { grid-template-columns: 1fr 1fr; }
+        .video-grid[data-count="5"] { grid-template-columns: 1fr 1fr 1fr; }
+        .video-grid[data-count="6"] { grid-template-columns: 1fr 1fr 1fr; }
+
+        .video-tile { position: relative; background: #1a1a2e; overflow: hidden; min-height: 0; }
+        .video-tile video { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .tile-label { position: absolute; bottom: 8px; left: 8px; background: rgba(0,0,0,.6); padding: 3px 10px; border-radius: 4px; font-size: 12px; color: #fff; }
+
+        /* Call controls overlay */
+        .call-controls { position: absolute; bottom: 0; left: 0; right: 0; padding: 18px 24px 28px; background: linear-gradient(0deg, rgba(0,0,0,.7), transparent); display: none; justify-content: center; gap: 22px; z-index: 6; }
+        .call-controls.show { display: flex; }
+        .ctrl-btn { width: 54px; height: 54px; border-radius: 50%; border: none; cursor: pointer; font-size: 22px; transition: transform .15s, background .15s; display: flex; align-items: center; justify-content: center; }
+        .ctrl-btn:hover { transform: translateY(-2px); }
+        .ctrl-btn.mic { background: #2a3942; color: #fff; }
+        .ctrl-btn.cam { background: #2a3942; color: #fff; }
+        .ctrl-btn.end { background: #ea4335; color: #fff; width: 60px; height: 60px; font-size: 24px; }
+        .ctrl-btn.off { background: #f44336; }
+
+        /* Call timer */
+        .call-timer { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,.55); padding: 4px 16px; border-radius: 20px; font-size: 13px; color: #fff; z-index: 6; display: none; }
+        .call-timer.show { display: block; }
+
+        /* Status bar */
+        .status-bar { background: #202c33; padding: 8px 18px; display: flex; align-items: center; gap: 8px; font-size: 12px; border-top: 1px solid #2a3942; }
+        .ws-dot { width: 8px; height: 8px; border-radius: 50%; background: #8696a0; }
+        .ws-dot.on { background: #00a884; }
+
+        /* ── Incoming Call Overlay ── */
+        .incoming-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.85); z-index: 100; align-items: center; justify-content: center; }
+        .incoming-overlay.show { display: flex; }
+        .incoming-card { background: #202c33; border-radius: 22px; padding: 44px 36px 36px; text-align: center; min-width: 320px; box-shadow: 0 16px 50px rgba(0,0,0,.6); animation: slideUp .3s ease; }
+        @keyframes slideUp { from { transform: translateY(30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .incoming-card .avatar { width: 90px; height: 90px; border-radius: 50%; background: linear-gradient(135deg, #667eea, #764ba2); margin: 0 auto 18px; display: flex; align-items: center; justify-content: center; font-size: 38px; font-weight: 600; animation: ring 1.2s ease-in-out infinite; }
+        @keyframes ring { 0%, 100% { box-shadow: 0 0 0 0 rgba(102,126,234,.6); } 50% { box-shadow: 0 0 0 16px rgba(102,126,234,0); } }
+        .incoming-card .caller { font-size: 20px; font-weight: 600; margin-bottom: 5px; }
+        .incoming-card .label { color: #8696a0; font-size: 13px; margin-bottom: 28px; }
+        .incoming-actions { display: flex; justify-content: center; gap: 44px; }
+        .inc-btn { display: flex; flex-direction: column; align-items: center; gap: 6px; cursor: pointer; background: none; border: none; color: #e9edef; }
+        .inc-btn .circle { width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 26px; transition: transform .15s; }
+        .inc-btn:hover .circle { transform: scale(1.1); }
+        .inc-btn .circle.accept { background: #00a884; }
+        .inc-btn .circle.decline { background: #ea4335; }
+        .inc-btn .txt { font-size: 11px; color: #8696a0; }
+
+        /* ── Outgoing Overlay ── */
+        .outgoing-overlay { display: none; position: absolute; inset: 0; background: linear-gradient(180deg, #1a1a2e, #16213e); z-index: 8; flex-direction: column; align-items: center; justify-content: center; gap: 18px; }
+        .outgoing-overlay.show { display: flex; }
+        .outgoing-overlay .avatar { width: 100px; height: 100px; border-radius: 50%; background: linear-gradient(135deg, #667eea, #764ba2); display: flex; align-items: center; justify-content: center; font-size: 42px; font-weight: 600; animation: ringOut 2s ease-in-out infinite; }
+        @keyframes ringOut { 0%, 100% { box-shadow: 0 0 0 0 rgba(0,168,132,.5); } 50% { box-shadow: 0 0 0 22px rgba(0,168,132,0); } }
+        .outgoing-overlay .name { font-size: 20px; font-weight: 600; }
+        .outgoing-overlay .state { font-size: 13px; color: #adb5bd; }
+        .outgoing-overlay .cancel-btn { margin-top: 36px; width: 60px; height: 60px; border-radius: 50%; border: none; background: #ea4335; color: #fff; font-size: 24px; cursor: pointer; transition: transform .15s; }
+        .outgoing-overlay .cancel-btn:hover { transform: scale(1.1); }
+
+        /* ── Add Person Picker ── */
+        .add-picker { display: none; position: absolute; top: 0; right: 0; bottom: 0; width: 320px; background: #111b21; z-index: 10; flex-direction: column; border-left: 1px solid #2a3942; animation: slideIn .25s ease; }
+        .add-picker.show { display: flex; }
+        @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+        .add-picker-header { display: flex; align-items: center; padding: 14px; background: #202c33; border-bottom: 1px solid #2a3942; gap: 10px; }
+        .add-picker-header h3 { flex: 1; font-size: 14px; font-weight: 600; }
+        .add-picker-close { width: 32px; height: 32px; border-radius: 50%; border: none; background: #2a3942; color: #e9edef; font-size: 16px; cursor: pointer; }
+        .add-picker-search { padding: 8px 14px; border-bottom: 1px solid #2a3942; }
+        .add-picker-search input { width: 100%; padding: 7px 12px; background: #202c33; border: 1px solid #3b4a54; border-radius: 8px; color: #e9edef; font-size: 13px; }
+        .add-picker-list { flex: 1; overflow-y: auto; }
+        .add-picker-list::-webkit-scrollbar { width: 5px; }
+        .add-picker-list::-webkit-scrollbar-thumb { background: #3b4a54; border-radius: 3px; }
+        .add-item { display: flex; align-items: center; padding: 10px 14px; border-bottom: 1px solid rgba(42,57,66,.35); cursor: pointer; transition: background .15s; }
+        .add-item:hover { background: #202c33; }
+        .add-item .user-avatar { width: 38px; height: 38px; font-size: 15px; }
+        .add-item .user-info { flex: 1; }
+        .add-item .add-btn { padding: 6px 14px; background: #00a884; border: none; border-radius: 8px; color: #fff; font-size: 12px; font-weight: 600; cursor: pointer; }
+        .add-item .add-btn:hover { background: #06cf9c; }
+        .add-item .add-btn:disabled { background: #3b4a54; cursor: not-allowed; }
+        .ctrl-btn.add { background: #2a3942; color: #fff; }
+    </style>
+</head>
+<body>
+<div class="app">
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <h2>Video Calls</h2>
+            <textarea class="auth-input" id="jwtToken" placeholder="Paste JWT token..." rows="2"></textarea>
+            <button class="btn-primary" id="connectBtn" onclick="connect()">Connect</button>
+            <div class="conn-status" id="connStatus"></div>
+        </div>
+        <div class="search-box">
+            <input type="text" class="search-input" id="searchInput" placeholder="Search users..." oninput="debouncedSearch()">
+        </div>
+        <div class="group-bar" id="groupBar">
+            <span id="selectedCount">0 selected</span>
+            <button onclick="startGroupCall()">Group Call</button>
+        </div>
+        <div class="user-list" id="userList"><div class="empty-msg">Connect to see users</div></div>
+    </div>
+
+    <!-- Main -->
+    <div class="main">
+        <div id="idleScreen" class="idle">
+            <div class="icon">📞</div>
+            <div class="text">Select a user to call, or check multiple for a group call</div>
+        </div>
+
+        <div class="video-area" id="videoArea">
+            <!-- Outgoing overlay -->
+            <div class="outgoing-overlay" id="outgoingOverlay">
+                <div class="avatar" id="outAvatar"></div>
+                <div class="name" id="outName"></div>
+                <div class="state" id="outState">Calling...</div>
+                <button class="cancel-btn" onclick="hangup()">&#10005;</button>
+            </div>
+
+            <!-- Video grid -->
+            <div class="video-grid" id="videoGrid" data-count="1"></div>
+
+            <!-- Timer -->
+            <div class="call-timer" id="callTimer">00:00</div>
+
+            <!-- Controls -->
+            <div class="call-controls" id="callControls">
+                <button class="ctrl-btn cam" id="camBtn" onclick="toggleVideo()">📹</button>
+                <button class="ctrl-btn add" id="addBtn" onclick="toggleAddPicker()" title="Add person">➕</button>
+                <button class="ctrl-btn end" onclick="hangup()">&#10005;</button>
+                <button class="ctrl-btn mic" id="micBtn" onclick="toggleAudio()">🎤</button>
+            </div>
+
+            <!-- Add Person Picker -->
+            <div class="add-picker" id="addPicker">
+                <div class="add-picker-header">
+                    <h3>Add Person</h3>
+                    <button class="add-picker-close" onclick="toggleAddPicker()">&#10005;</button>
+                </div>
+                <div class="add-picker-search">
+                    <input type="text" placeholder="Search users..." oninput="debouncedPickerSearch(this.value)">
+                </div>
+                <div class="add-picker-list" id="addPickerList"></div>
+            </div>
+        </div>
+
+        <div class="status-bar">
+            <span class="ws-dot" id="wsDot"></span>
+            <span id="wsLabel">Not connected</span>
+        </div>
+    </div>
+</div>
+
+<!-- Incoming Call Overlay -->
+<div class="incoming-overlay" id="incomingOverlay">
+    <div class="incoming-card">
+        <div class="avatar" id="incAvatar"></div>
+        <div class="caller" id="incCaller">Unknown</div>
+        <div class="label" id="incLabel">Incoming video call</div>
+        <div class="incoming-actions">
+            <button class="inc-btn" onclick="declineCall()">
+                <div class="circle decline">&#10005;</div>
+                <span class="txt">Decline</span>
+            </button>
+            <button class="inc-btn" onclick="acceptCall()">
+                <div class="circle accept">📞</div>
+                <span class="txt">Accept</span>
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+/* ═══════════ STATE ═══════════ */
+let ws = null;
+let localStream = null;
+let currentCallId = null;
+let currentUser = null;
+let incomingCallData = null;
+let isCamOn = true, isMicOn = true;
+let callTimerInterval = null, callSeconds = 0;
+let searchTimeout = null;
+
+// Group call state
+let peerConnections = {};   // userId -> RTCPeerConnection
+let remoteStreams = {};      // userId -> MediaStream
+let participantNames = {};  // userId -> username
+let selectedUsers = {};     // userId -> username (sidebar checkboxes)
+let pendingOffers = [];     // offers received before Accept
+let iceCandidateQueues = {}; // userId -> [candidates]
+
+const RTC_CONFIG = {
+    iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' }
+    ]
+};
+
+/* ═══════════ CONNECT ═══════════ */
+async function connect() {
+    const token = document.getElementById('jwtToken').value.trim();
+    if (!token) return alert('Enter a JWT token');
+    const btn = document.getElementById('connectBtn');
+    btn.disabled = true;
+    setStatus('Connecting...');
+
+    try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        currentUser = { id: String(payload.user_id || payload.sub), sub: payload.sub };
+
+        if (ws) { ws.onclose = null; ws.close(); }
+        ws = new WebSocket(`ws://${location.hostname}:8000/calls/ws?token=${encodeURIComponent(token)}`);
+
+        ws.onopen = () => {
+            setStatus('Connected as ' + payload.sub, true);
+            document.getElementById('wsDot').classList.add('on');
+            document.getElementById('wsLabel').textContent = 'Connected';
+            loadUsers(token);
+        };
+        ws.onmessage = e => { try { handleWsMessage(JSON.parse(e.data)); } catch (err) { console.error('WS parse', err); } };
+        ws.onerror = () => { setStatus('Connection error', false); btn.disabled = false; };
+        ws.onclose = e => {
+            setStatus('Disconnected (' + e.code + ')', false);
+            document.getElementById('wsDot').classList.remove('on');
+            document.getElementById('wsLabel').textContent = 'Disconnected';
+            btn.disabled = false;
+        };
+    } catch (err) { setStatus('Error: ' + err.message, false); btn.disabled = false; }
+}
+
+function setStatus(msg, ok) {
+    const el = document.getElementById('connStatus');
+    el.textContent = (ok === true ? '● ' : ok === false ? '✕ ' : '') + msg;
+    el.style.color = ok === true ? '#00a884' : ok === false ? '#ea4335' : '#8696a0';
+}
+
+/* ═══════════ USER LIST ═══════════ */
+let allUsers = [];
+
+async function loadUsers(token) {
+    document.getElementById('userList').innerHTML = '<div class="empty-msg">Loading...</div>';
+    try {
+        const r = await fetch('/calls/users/search', { headers: { Authorization: 'Bearer ' + token } });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        allUsers = await r.json();
+        renderUsers(allUsers);
+    } catch { document.getElementById('userList').innerHTML = '<div class="empty-msg">Failed to load</div>'; }
+}
+
+function renderUsers(users) {
+    const list = document.getElementById('userList');
+    if (!users.length) { list.innerHTML = '<div class="empty-msg">No users found</div>'; return; }
+    const frag = document.createDocumentFragment();
+    users.slice(0, 40).forEach(u => {
+        const d = document.createElement('div');
+        d.className = 'user-item';
+        const cb = document.createElement('input');
+        cb.type = 'checkbox'; cb.className = 'user-cb';
+        cb.checked = !!selectedUsers[u.id];
+        cb.addEventListener('change', () => toggleSelect(u.id, u.username, cb.checked));
+
+        d.innerHTML = `
+            <div class="user-avatar">${esc((u.username||'?')[0].toUpperCase())}</div>
+            <div class="user-info">
+                <div class="user-name">${esc(u.username)}</div>
+                <div class="user-sub">${esc(u.email || u.phone_number || '')}</div>
+            </div>`;
+        d.prepend(cb);
+
+        const btn = document.createElement('button');
+        btn.className = 'call-icon-btn'; btn.textContent = '📞';
+        btn.title = 'Direct call';
+        btn.addEventListener('click', e => { e.stopPropagation(); callUser(String(u.id), u.username); });
+        d.appendChild(btn);
+        frag.appendChild(d);
+    });
+    list.innerHTML = '';
+    list.appendChild(frag);
+}
+
+function toggleSelect(id, name, checked) {
+    if (checked) selectedUsers[id] = name;
+    else delete selectedUsers[id];
+    const n = Object.keys(selectedUsers).length;
+    const bar = document.getElementById('groupBar');
+    if (n >= 2) { bar.classList.add('show'); document.getElementById('selectedCount').textContent = n + ' selected'; }
+    else bar.classList.remove('show');
+}
+
+function debouncedSearch() {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(async () => {
+        const q = document.getElementById('searchInput').value.trim();
+        const token = document.getElementById('jwtToken').value.trim();
+        if (!token) return;
+        try {
+            const r = await fetch('/calls/users/search?query=' + encodeURIComponent(q), { headers: { Authorization: 'Bearer ' + token } });
+            if (r.ok) renderUsers(await r.json());
+        } catch {}
+    }, 350);
+}
+
+/* ═══════════ OUTGOING: DIRECT CALL ═══════════ */
+async function callUser(userId, username) {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return alert('Connect first');
+    if (currentCallId) return alert('Already in a call');
+
+    participantNames[userId] = username;
+    showOutgoing(username, false);
+
+    const token = document.getElementById('jwtToken').value.trim();
+    try {
+        const r = await fetch('/calls/call-user/' + userId, {
+            method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const data = await r.json();
+        currentCallId = data.id;
+        await startLocalMedia();
+        addVideoTile('local', 'You', localStream, true);
+    } catch (err) { alert('Call failed: ' + err.message); resetCallState(); }
+}
+
+/* ═══════════ OUTGOING: GROUP CALL ═══════════ */
+async function startGroupCall() {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return alert('Connect first');
+    if (currentCallId) return alert('Already in a call');
+    const ids = Object.keys(selectedUsers);
+    if (ids.length < 2) return alert('Select at least 2 users');
+
+    ids.forEach(id => { participantNames[id] = selectedUsers[id]; });
+    const names = Object.values(selectedUsers).join(', ');
+    showOutgoing(names, true);
+
+    const token = document.getElementById('jwtToken').value.trim();
+    try {
+        const r = await fetch('/calls/group-call', {
+            method: 'POST',
+            headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_ids: ids })
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const data = await r.json();
+        currentCallId = data.id;
+        await startLocalMedia();
+        addVideoTile('local', 'You', localStream, true);
+    } catch (err) { alert('Group call failed: ' + err.message); resetCallState(); }
+}
+
+/* ═══════════ INCOMING CALL ═══════════ */
+function handleIncomingCall(data) {
+    if (currentCallId) return; // busy
+    incomingCallData = data;
+    const name = data.from_username || 'Unknown';
+    document.getElementById('incCaller').textContent = name;
+    document.getElementById('incAvatar').textContent = name[0].toUpperCase();
+    document.getElementById('incLabel').textContent = data.is_group_call
+        ? `Group video call (${data.participant_count || '?'} people)`
+        : 'Incoming video call';
+    document.getElementById('incomingOverlay').classList.add('show');
+}
+
+async function acceptCall() {
+    document.getElementById('incomingOverlay').classList.remove('show');
+    if (!incomingCallData) return;
+
+    currentCallId = incomingCallData.call_id;
+    const callerId = String(incomingCallData.from_user_id);
+    participantNames[callerId] = incomingCallData.from_username || 'User';
+
+    showVideoGrid();
+    await startLocalMedia();
+    addVideoTile('local', 'You', localStream, true);
+
+    // Tell server we accepted (server will send PARTICIPANT_JOINED to existing members)
+    wsSend({ type: 'CALL_ACCEPTED', data: { call_id: currentCallId, to_user_id: callerId } });
+
+    // Process any offers that arrived while the modal was showing
+    const queued = [...pendingOffers];
+    pendingOffers = [];
+    for (const o of queued) await handleOffer(o);
+
+    incomingCallData = null;
+}
+
+function declineCall() {
+    document.getElementById('incomingOverlay').classList.remove('show');
+    if (incomingCallData) {
+        wsSend({ type: 'CALL_DECLINED', data: { call_id: incomingCallData.call_id, to_user_id: incomingCallData.from_user_id } });
+    }
+    incomingCallData = null;
+}
+
+/* ═══════════ WEBRTC: PEER CONNECTIONS ═══════════ */
+async function startLocalMedia() {
+    if (localStream) return;
+    localStream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 640 }, height: { ideal: 480 } }, audio: true
+    });
+    document.querySelectorAll('#videoGrid video[data-uid="local"]').forEach(v => v.srcObject = localStream);
+}
+
+function createPeerConnectionFor(userId) {
+    if (peerConnections[userId]) return peerConnections[userId];
+
+    const pc = new RTCPeerConnection(RTC_CONFIG);
+    peerConnections[userId] = pc;
+    iceCandidateQueues[userId] = iceCandidateQueues[userId] || [];
+
+    if (localStream) localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+
+    pc.onicecandidate = e => {
+        if (e.candidate) wsSend({ type: 'WEBRTC_ICE_CANDIDATE', data: { to_user_id: userId, candidate: e.candidate } });
+    };
+
+    pc.ontrack = e => {
+        remoteStreams[userId] = e.streams[0];
+        addVideoTile(userId, participantNames[userId] || 'User', e.streams[0], false);
+        showVideoGrid();
+        startCallTimerOnce();
+    };
+
+    pc.oniceconnectionstatechange = () => {
+        const s = pc.iceConnectionState;
+        console.log(`[ICE ${userId}]`, s);
+        if (s === 'connected' || s === 'completed') startCallTimerOnce();
+        else if (s === 'failed') removeParticipant(userId);
+    };
+
+    return pc;
+}
+
+/* ═══════════ OFFER / ANSWER / ICE ═══════════ */
+async function createOfferToUser(userId) {
+    console.log('[OFFER] Creating offer to', userId);
+    if (!localStream) await startLocalMedia();
+    const pc = createPeerConnectionFor(userId);
+
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    wsSend({ type: 'WEBRTC_OFFER', data: { to_user_id: userId, offer: { type: offer.type, sdp: offer.sdp } } });
+}
+
+async function handleOffer(msg) {
+    const fromUser = String(msg.from_user_id);
+    if (!currentCallId) { pendingOffers.push(msg); return; }
+
+    console.log('[OFFER] Received from', fromUser);
+    if (!localStream) await startLocalMedia();
+
+    const pc = createPeerConnectionFor(fromUser);
+    const offerDesc = msg.data.offer || msg.data;
+    await pc.setRemoteDescription(new RTCSessionDescription(offerDesc));
+
+    // Flush queued ICE
+    await flushIceCandidates(fromUser);
+
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    wsSend({ type: 'WEBRTC_ANSWER', data: { to_user_id: fromUser, answer: { type: answer.type, sdp: answer.sdp } } });
+}
+
+async function handleAnswer(msg) {
+    const fromUser = String(msg.from_user_id);
+    const pc = peerConnections[fromUser];
+    if (!pc) return;
+
+    const answerDesc = msg.data.answer || msg.data;
+    await pc.setRemoteDescription(new RTCSessionDescription(answerDesc));
+    await flushIceCandidates(fromUser);
+}
+
+async function handleIceCandidate(msg) {
+    const fromUser = String(msg.from_user_id);
+    const candidateData = msg.data;
+    if (!candidateData) return;
+
+    const candidateInit = candidateData.candidate !== undefined ? candidateData : { candidate: candidateData };
+    const pc = peerConnections[fromUser];
+
+    if (pc && pc.remoteDescription) {
+        try { await pc.addIceCandidate(new RTCIceCandidate(candidateInit)); } catch (e) { console.warn('[ICE] add fail', e); }
+    } else {
+        if (!iceCandidateQueues[fromUser]) iceCandidateQueues[fromUser] = [];
+        iceCandidateQueues[fromUser].push(candidateInit);
+    }
+}
+
+async function flushIceCandidates(userId) {
+    const queue = iceCandidateQueues[userId] || [];
+    const pc = peerConnections[userId];
+    if (!pc || !pc.remoteDescription) return;
+
+    for (const c of queue) {
+        try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch (e) {}
+    }
+    iceCandidateQueues[userId] = [];
+}
+
+/* ═══════════ VIDEO GRID ═══════════ */
+function addVideoTile(userId, name, stream, muted) {
+    const grid = document.getElementById('videoGrid');
+    let tile = document.getElementById('tile-' + userId);
+
+    if (tile) {
+        // Update stream
+        const vid = tile.querySelector('video');
+        vid.srcObject = stream;
+        return;
+    }
+
+    tile = document.createElement('div');
+    tile.className = 'video-tile';
+    tile.id = 'tile-' + userId;
+
+    const vid = document.createElement('video');
+    vid.autoplay = true; vid.playsInline = true;
+    vid.setAttribute('data-uid', userId);
+    if (muted) vid.muted = true;
+    vid.srcObject = stream;
+
+    const label = document.createElement('span');
+    label.className = 'tile-label';
+    label.textContent = name;
+
+    tile.appendChild(vid);
+    tile.appendChild(label);
+    grid.appendChild(tile);
+    updateGridCount();
+}
+
+function removeVideoTile(userId) {
+    const tile = document.getElementById('tile-' + userId);
+    if (tile) { tile.remove(); updateGridCount(); }
+}
+
+function updateGridCount() {
+    const grid = document.getElementById('videoGrid');
+    grid.setAttribute('data-count', grid.children.length);
+}
+
+function removeParticipant(userId) {
+    console.log('[REMOVE]', userId);
+    const pc = peerConnections[userId];
+    if (pc) { pc.close(); delete peerConnections[userId]; }
+    delete remoteStreams[userId];
+    delete iceCandidateQueues[userId];
+    removeVideoTile(userId);
+
+    // If no peers left, end call
+    if (Object.keys(peerConnections).length === 0 && currentCallId) {
+        resetCallState();
+    }
+}
+
+/* ═══════════ CONTROLS ═══════════ */
+function toggleVideo() {
+    if (!localStream) return;
+    const t = localStream.getVideoTracks()[0]; if (!t) return;
+    t.enabled = !t.enabled; isCamOn = t.enabled;
+    const btn = document.getElementById('camBtn');
+    btn.textContent = isCamOn ? '📹' : '🚫';
+    btn.classList.toggle('off', !isCamOn);
+}
+
+function toggleAudio() {
+    if (!localStream) return;
+    const t = localStream.getAudioTracks()[0]; if (!t) return;
+    t.enabled = !t.enabled; isMicOn = t.enabled;
+    const btn = document.getElementById('micBtn');
+    btn.textContent = isMicOn ? '🎤' : '🔇';
+    btn.classList.toggle('off', !isMicOn);
+}
+
+function hangup() {
+    if (currentCallId && ws && ws.readyState === WebSocket.OPEN) {
+        wsSend({ type: 'CALL_ENDED', data: { call_id: currentCallId } });
+    }
+    resetCallState();
+}
+
+function resetCallState() {
+    // Close all peer connections
+    Object.values(peerConnections).forEach(pc => pc.close());
+    peerConnections = {};
+    remoteStreams = {};
+    iceCandidateQueues = {};
+    pendingOffers = [];
+
+    if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
+
+    // Clear video grid
+    document.getElementById('videoGrid').innerHTML = '';
+    updateGridCount();
+
+    // Hide UI
+    document.getElementById('videoArea').classList.remove('active');
+    document.getElementById('outgoingOverlay').classList.remove('show');
+    document.getElementById('callControls').classList.remove('show');
+    document.getElementById('callTimer').classList.remove('show');
+    document.getElementById('incomingOverlay').classList.remove('show');
+    document.getElementById('addPicker').classList.remove('show');
+    document.getElementById('idleScreen').style.display = '';
+
+    currentCallId = null;
+    isCamOn = true; isMicOn = true;
+    document.getElementById('camBtn').textContent = '📹';
+    document.getElementById('camBtn').classList.remove('off');
+    document.getElementById('micBtn').textContent = '🎤';
+    document.getElementById('micBtn').classList.remove('off');
+    stopCallTimer();
+}
+
+/* ═══════════ TIMER ═══════════ */
+let timerStarted = false;
+function startCallTimerOnce() {
+    if (timerStarted) return;
+    timerStarted = true;
+    callSeconds = 0;
+    document.getElementById('callTimer').classList.add('show');
+    callTimerInterval = setInterval(() => {
+        callSeconds++;
+        const m = String(Math.floor(callSeconds / 60)).padStart(2, '0');
+        const s = String(callSeconds % 60).padStart(2, '0');
+        document.getElementById('callTimer').textContent = m + ':' + s;
+    }, 1000);
+}
+
+function stopCallTimer() {
+    timerStarted = false;
+    if (callTimerInterval) { clearInterval(callTimerInterval); callTimerInterval = null; }
+}
+
+/* ═══════════ UI HELPERS ═══════════ */
+function showOutgoing(name, isGroup) {
+    document.getElementById('idleScreen').style.display = 'none';
+    document.getElementById('videoArea').classList.add('active');
+    document.getElementById('outgoingOverlay').classList.add('show');
+    document.getElementById('outAvatar').textContent = isGroup ? '👥' : name[0].toUpperCase();
+    document.getElementById('outName').textContent = isGroup ? 'Group Call' : name;
+    document.getElementById('outState').textContent = isGroup ? `Calling ${name}...` : 'Calling...';
+    document.getElementById('callControls').classList.remove('show');
+}
+
+function showVideoGrid() {
+    document.getElementById('idleScreen').style.display = 'none';
+    document.getElementById('videoArea').classList.add('active');
+    document.getElementById('outgoingOverlay').classList.remove('show');
+    document.getElementById('callControls').classList.add('show');
+}
+
+/* ═══════════ WEBSOCKET ROUTER ═══════════ */
+function handleWsMessage(msg) {
+    const type = (msg.type || '').toUpperCase();
+    console.log('[WS]', type);
+
+    switch (type) {
+        case 'INCOMING_CALL':
+        case 'CALL_INITIATED':
+            if (msg.data?.caller_info) {
+                handleIncomingCall({
+                    call_id: msg.data.call_id,
+                    from_user_id: msg.data.caller_info.user_id,
+                    from_username: msg.data.caller_info.full_name || msg.data.caller_info.username || 'Unknown',
+                    is_group_call: msg.data.is_group_call || false,
+                    participant_count: msg.data.participant_count
+                });
+            } else {
+                handleIncomingCall(msg.data);
+            }
+            break;
+
+        case 'CALL_ACCEPTED':
+            // Someone accepted our call (or the outgoing call in general)
+            document.getElementById('outState').textContent = 'Accepted! Connecting...';
+            break;
+
+        case 'PARTICIPANT_JOINED':
+            // Someone joined the call → create offer to them
+            {
+                const newUid = String(msg.data.user_id);
+                console.log('[PARTICIPANT_JOINED]', newUid);
+                if (newUid !== currentUser?.id) {
+                    showVideoGrid(); // switch from outgoing overlay to grid
+                    createOfferToUser(newUid).catch(e => console.error('offer error', e));
+                }
+            }
+            break;
+
+        case 'PARTICIPANT_LEFT':
+            // Someone left the call → close their connection
+            removeParticipant(String(msg.data.user_id));
+            break;
+
+        case 'CALL_DECLINED':
+            alert('Call was declined');
+            // In group call, don't end everything
+            break;
+
+        case 'WEBRTC_OFFER':
+            handleOffer(msg).catch(e => console.error('offer err', e));
+            break;
+
+        case 'WEBRTC_ANSWER':
+            handleAnswer(msg).catch(e => console.error('answer err', e));
+            break;
+
+        case 'WEBRTC_ICE_CANDIDATE':
+            handleIceCandidate(msg).catch(e => console.error('ice err', e));
+            break;
+
+        case 'CALL_ENDED':
+            resetCallState();
+            break;
+    }
+}
+
+/* ═══════════ UTILS ═══════════ */
+function wsSend(obj) { if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj)); }
+function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
+/* ═══════════ ADD PERSON MID-CALL ═══════════ */
+let pickerSearchTimeout = null;
+
+function toggleAddPicker() {
+    const picker = document.getElementById('addPicker');
+    const isOpen = picker.classList.toggle('show');
+    if (isOpen) renderPickerList(allUsers);
+}
+
+function debouncedPickerSearch(q) {
+    clearTimeout(pickerSearchTimeout);
+    pickerSearchTimeout = setTimeout(async () => {
+        const token = document.getElementById('jwtToken').value.trim();
+        if (!token) return;
+        try {
+            const r = await fetch('/calls/users/search?query=' + encodeURIComponent(q), { headers: { Authorization: 'Bearer ' + token } });
+            if (r.ok) renderPickerList(await r.json());
+        } catch {}
+    }, 350);
+}
+
+function renderPickerList(users) {
+    const list = document.getElementById('addPickerList');
+    if (!users.length) { list.innerHTML = '<div class="empty-msg">No users</div>'; return; }
+
+    // Find users already in the call
+    const inCall = new Set(Object.keys(peerConnections));
+    if (currentUser) inCall.add(currentUser.id);
+
+    const frag = document.createDocumentFragment();
+    users.slice(0, 30).forEach(u => {
+        const uid = String(u.id);
+        const already = inCall.has(uid);
+        const d = document.createElement('div');
+        d.className = 'add-item';
+        d.innerHTML = `
+            <div class="user-avatar">${esc((u.username||'?')[0].toUpperCase())}</div>
+            <div class="user-info">
+                <div class="user-name">${esc(u.username)}</div>
+                <div class="user-sub">${esc(u.email || u.phone_number || '')}</div>
+            </div>`;
+        const btn = document.createElement('button');
+        btn.className = 'add-btn';
+        btn.textContent = already ? 'In call' : 'Add';
+        btn.disabled = already;
+        if (!already) btn.addEventListener('click', () => addPersonToCall(uid, u.username, btn));
+        d.appendChild(btn);
+        frag.appendChild(d);
+    });
+    list.innerHTML = '';
+    list.appendChild(frag);
+}
+
+async function addPersonToCall(userId, username, btn) {
+    if (!currentCallId) return;
+    btn.disabled = true; btn.textContent = 'Adding...';
+    const token = document.getElementById('jwtToken').value.trim();
+    try {
+        const r = await fetch(`/calls/${currentCallId}/add-user/${userId}`, {
+            method: 'POST',
+            headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }
+        });
+        if (!r.ok) {
+            const err = await r.json().catch(() => ({}));
+            throw new Error(err.detail || 'HTTP ' + r.status);
+        }
+        btn.textContent = 'Ringing...';
+        participantNames[userId] = username;
+    } catch (err) {
+        alert('Could not add: ' + err.message);
+        btn.disabled = false; btn.textContent = 'Add';
+    }
+}
+
+window.addEventListener('beforeunload', () => {
+    if (currentCallId) hangup();
+    if (ws) { ws.onclose = null; ws.close(); }
+});
+</script>
+</body>
+</html>

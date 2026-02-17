@@ -8,9 +8,27 @@ from typing import List
 import logging
 
 from database import get_db
-from auth.utils.jwt_token import get_current_user
+from auth.utils.jwt_token import get_current_user, jwt_utils, HTTPBearer
 from auth.models import User
 from call.services.call_service import CallService
+
+# Simplified dependency for call routes
+security = HTTPBearer()
+
+async def get_current_user_simple(credentials = Depends(security)) -> dict:
+    """Get current user from token without requiring full User model"""
+    payload = jwt_utils.verify_token(credentials.credentials, "access")
+    if not payload:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token"
+        )
+    return {
+        "user_id": payload.get("user_id") or payload.get("sub"),
+        "email": payload.get("sub"),
+        "username": payload.get("username", "unknown")
+    }
+
 from call.schemas.call_schemas import (
     CallCreate,
     CallResponse,
@@ -19,7 +37,8 @@ from call.schemas.call_schemas import (
     CallEnd,
     CallListResponse,
     WebRTCSignal,
-    WSMessageType
+    WSMessageType,
+    GroupCallCreate
 )
 from call.utils.call_signaling_manager import call_signaling_manager
 
@@ -33,7 +52,7 @@ router = APIRouter(prefix="/calls", tags=["Calls"])
 @router.post("/", response_model=CallResponse, status_code=status.HTTP_201_CREATED)
 async def create_call(
     call_data: CallCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user_simple),
     db: Session = Depends(get_db)
 ):
     """
@@ -45,16 +64,16 @@ async def create_call(
     Returns the created call with participant information.
     """
     service = CallService(db)
-    call = service.create_call(current_user.id, call_data)
+    call = service.create_call(current_user["user_id"], call_data)
     
     # Notify invited participants via WebSocket
     for participant in call.participants:
-        if participant.user_id != current_user.id:
+        if participant.user_id != current_user["user_id"]:
             await call_signaling_manager.notify_incoming_call(
                 user_id=participant.user_id,
                 call_id=call.id,
                 caller_info={
-                    "user_id": current_user.id,
+                    "user_id": current_user["user_id"],
                     "full_name": current_user.full_name,
                     "phone_number": current_user.phone_number
                 }
@@ -66,7 +85,7 @@ async def create_call(
 @router.post("/invite", response_model=CallResponse)
 async def invite_to_call(
     invite_data: CallInvite,
-    current_user: User = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user_simple),
     db: Session = Depends(get_db)
 ):
     """
@@ -77,16 +96,16 @@ async def invite_to_call(
     - **phone_numbers**: Phone numbers to invite
     """
     service = CallService(db)
-    call = service.invite_participants(current_user.id, invite_data)
+    call = service.invite_participants(current_user["user_id"], invite_data)
     
     # Notify newly invited participants
     for participant in call.participants:
-        if participant.invited_by_user_id == current_user.id:
+        if participant.invited_by_user_id == current_user["user_id"]:
             await call_signaling_manager.notify_incoming_call(
                 user_id=participant.user_id,
                 call_id=call.id,
                 caller_info={
-                    "user_id": current_user.id,
+                    "user_id": current_user["user_id"],
                     "full_name": current_user.full_name,
                     "phone_number": current_user.phone_number
                 }
@@ -99,11 +118,11 @@ async def invite_to_call(
             "type": WSMessageType.PARTICIPANT_INVITED.value,
             "data": {
                 "call_id": call.id,
-                "invited_by": current_user.id,
+                "invited_by": current_user["user_id"],
                 "new_participants": len(invite_data.phone_numbers)
             }
         },
-        exclude_user_id=current_user.id
+        exclude_user_id=current_user["user_id"]
     )
     
     return service._convert_to_response(call)
@@ -112,7 +131,7 @@ async def invite_to_call(
 @router.post("/join", response_model=CallResponse)
 async def join_call(
     join_data: CallJoin,
-    current_user: User = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user_simple),
     db: Session = Depends(get_db)
 ):
     """
@@ -122,17 +141,17 @@ async def join_call(
     - **peer_id**: WebRTC peer ID for this user
     """
     service = CallService(db)
-    call = service.join_call(current_user.id, join_data.call_id, join_data.peer_id)
+    call = service.join_call(current_user["user_id"], join_data.call_id, join_data.peer_id)
     
     # Add to signaling manager
-    call_signaling_manager.add_to_call(call.id, current_user.id, join_data.peer_id)
+    call_signaling_manager.add_to_call(call.id, current_user["user_id"], join_data.peer_id)
     
     # Notify other participants
     await call_signaling_manager.notify_participant_joined(
         call_id=call.id,
-        user_id=current_user.id,
+        user_id=current_user["user_id"],
         user_info={
-            "user_id": current_user.id,
+            "user_id": current_user["user_id"],
             "full_name": current_user.full_name,
             "phone_number": current_user.phone_number,
             "peer_id": join_data.peer_id
@@ -145,7 +164,7 @@ async def join_call(
 @router.post("/leave", response_model=CallResponse)
 async def leave_call(
     leave_data: CallEnd,
-    current_user: User = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user_simple),
     db: Session = Depends(get_db)
 ):
     """
@@ -154,15 +173,15 @@ async def leave_call(
     - **call_id**: ID of the call to leave
     """
     service = CallService(db)
-    call = service.leave_call(current_user.id, leave_data.call_id)
+    call = service.leave_call(current_user["user_id"], leave_data.call_id)
     
     # Remove from signaling manager
-    call_signaling_manager.remove_from_call(leave_data.call_id, current_user.id)
+    call_signaling_manager.remove_from_call(leave_data.call_id, current_user["user_id"])
     
     # Notify other participants
     await call_signaling_manager.notify_participant_left(
         call_id=leave_data.call_id,
-        user_id=current_user.id
+        user_id=current_user["user_id"]
     )
     
     return service._convert_to_response(call)
@@ -171,7 +190,7 @@ async def leave_call(
 @router.post("/end", response_model=CallResponse)
 async def end_call(
     end_data: CallEnd,
-    current_user: User = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user_simple),
     db: Session = Depends(get_db)
 ):
     """
@@ -180,7 +199,7 @@ async def end_call(
     - **call_id**: ID of the call to end
     """
     service = CallService(db)
-    call = service.end_call(current_user.id, end_data.call_id)
+    call = service.end_call(current_user["user_id"], end_data.call_id)
     
     # Notify all participants
     await call_signaling_manager.notify_call_ended(end_data.call_id)
@@ -191,7 +210,7 @@ async def end_call(
 @router.post("/decline", response_model=CallResponse)
 async def decline_call(
     decline_data: CallEnd,
-    current_user: User = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user_simple),
     db: Session = Depends(get_db)
 ):
     """
@@ -200,7 +219,7 @@ async def decline_call(
     - **call_id**: ID of the call to decline
     """
     service = CallService(db)
-    call = service.decline_call(current_user.id, decline_data.call_id)
+    call = service.decline_call(current_user["user_id"], decline_data.call_id)
     
     # Notify other participants
     await call_signaling_manager.broadcast_to_call(
@@ -209,7 +228,7 @@ async def decline_call(
             "type": WSMessageType.CALL_DECLINED.value,
             "data": {
                 "call_id": decline_data.call_id,
-                "user_id": current_user.id
+                "user_id": current_user["user_id"]
             }
         }
     )
@@ -220,7 +239,7 @@ async def decline_call(
 @router.get("/{call_id}", response_model=CallResponse)
 async def get_call(
     call_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user_simple),
     db: Session = Depends(get_db)
 ):
     """
@@ -238,7 +257,7 @@ async def get_call(
         )
     
     # Verify user is a participant
-    is_participant = any(p.user_id == current_user.id for p in call.participants)
+    is_participant = any(p.user_id == current_user["user_id"] for p in call.participants)
     if not is_participant:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -250,14 +269,14 @@ async def get_call(
 
 @router.get("/", response_model=List[CallResponse])
 async def get_active_calls(
-    current_user: User = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user_simple),
     db: Session = Depends(get_db)
 ):
     """
     Get all active calls for the current user.
     """
     service = CallService(db)
-    calls = service.get_active_calls(current_user.id)
+    calls = service.get_active_calls(current_user["user_id"])
     
     return [service._convert_to_response(call) for call in calls]
 
@@ -266,7 +285,7 @@ async def get_active_calls(
 async def get_call_history(
     skip: int = 0,
     limit: int = 50,
-    current_user: User = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user_simple),
     db: Session = Depends(get_db)
 ):
     """
@@ -276,7 +295,7 @@ async def get_call_history(
     - **limit**: Maximum number of records to return
     """
     service = CallService(db)
-    calls, total = service.get_call_history(current_user.id, skip, limit)
+    calls, total = service.get_call_history(current_user["user_id"], skip, limit)
     
     return CallListResponse(
         calls=[service._convert_to_response(call) for call in calls],
@@ -284,6 +303,128 @@ async def get_call_history(
         page=skip // limit + 1,
         page_size=limit
     )
+
+
+@router.get("/users/search")
+async def search_users_for_call(
+    query: str = "",
+    current_user: dict = Depends(get_current_user_simple),
+    db: Session = Depends(get_db)
+):
+    """
+    Search for users to call (like WhatsApp contact search).
+    Returns active users matching the search query.
+    """
+    from auth.repositories.user_repository import user_repository
+    
+    if query:
+        users = user_repository.search_users(db, query, limit=20)
+    else:
+        users = user_repository.get_active_users(db, limit=50)
+    
+    # Exclude current user
+    users = [u for u in users if u.id != current_user["user_id"]]
+    
+    return [{
+        "id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "phone_number": user.phone_number,
+        "is_online": False  # You can implement online status tracking
+    } for user in users]
+
+
+@router.post("/call-user/{user_id}", response_model=CallResponse, status_code=status.HTTP_201_CREATED)
+async def call_user_directly(
+    user_id: str,
+    current_user: dict = Depends(get_current_user_simple),
+    db: Session = Depends(get_db)
+):
+    """
+    Initiate a direct call to another user (like WhatsApp call).
+    
+    - **user_id**: The ID of the user to call
+    """
+    service = CallService(db)
+    call = service.create_direct_call(current_user["user_id"], user_id)
+    
+    # Add caller to signaling manager so they are tracked in the call
+    call_signaling_manager.add_to_call(str(call.id), str(current_user["user_id"]))
+    
+    # Notify the called user via WebSocket
+    await call_signaling_manager.send_call_notification(
+        to_user_id=user_id,
+        call_id=str(call.id),
+        from_user_id=str(current_user["user_id"]),
+        from_username=current_user["username"]
+    )
+    
+    return service._convert_to_response(call)
+
+
+@router.post("/group-call", response_model=CallResponse, status_code=status.HTTP_201_CREATED)
+async def create_group_call(
+    call_data: GroupCallCreate,
+    current_user: dict = Depends(get_current_user_simple),
+    db: Session = Depends(get_db)
+):
+    """
+    Create a group call with multiple users.
+    
+    - **user_ids**: List of user IDs to invite
+    """
+    service = CallService(db)
+    call = service.create_group_call_by_ids(current_user["user_id"], call_data.user_ids)
+    
+    # Add caller to signaling manager
+    call_signaling_manager.add_to_call(str(call.id), str(current_user["user_id"]))
+    
+    # Notify each invited user
+    for uid in call_data.user_ids:
+        if str(uid) != str(current_user["user_id"]):
+            await call_signaling_manager.send_to_user(str(uid), {
+                "type": "INCOMING_CALL",
+                "data": {
+                    "call_id": str(call.id),
+                    "from_user_id": str(current_user["user_id"]),
+                    "from_username": current_user["username"],
+                    "is_group_call": True,
+                    "participant_count": len(call_data.user_ids)
+                }
+            })
+    
+    return service._convert_to_response(call)
+
+
+@router.post("/{call_id}/add-user/{user_id}", response_model=CallResponse)
+async def add_user_to_call(
+    call_id: str,
+    user_id: str,
+    current_user: dict = Depends(get_current_user_simple),
+    db: Session = Depends(get_db)
+):
+    """
+    Add a person to an ongoing call. Any participant can add others.
+
+    - **call_id**: The active call ID
+    - **user_id**: The user to add
+    """
+    service = CallService(db)
+    call = service.add_user_to_existing_call(current_user["user_id"], call_id, user_id)
+
+    # Send incoming-call notification to the new user
+    await call_signaling_manager.send_to_user(str(user_id), {
+        "type": "INCOMING_CALL",
+        "data": {
+            "call_id": str(call.id),
+            "from_user_id": str(current_user["user_id"]),
+            "from_username": current_user["username"],
+            "is_group_call": call.is_group_call,
+            "participant_count": len(call.participants)
+        }
+    })
+
+    return service._convert_to_response(call)
 
 
 # WebSocket for WebRTC Signaling
@@ -300,17 +441,60 @@ async def websocket_endpoint(
     Query parameter:
     - **token**: JWT authentication token
     """
+    logger.info(f"WebSocket connection attempt with token: {token[:20]}...")
+    
     # Authenticate user
     try:
-        from auth.utils.jwt_token import verify_token
-        payload = verify_token(token)
-        user_id = payload.get("sub")
-        if not user_id:
+        from auth.utils.jwt_token import JWTUtils
+        from auth.repositories.user_repository import user_repository
+        jwt_utils = JWTUtils()
+        payload = jwt_utils.verify_token(token)
+        
+        if not payload:
+            logger.error("Invalid or expired token")
+            await websocket.accept()
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
             return
+        
+        logger.info(f"Token payload: {payload}")
+        
+        # Get user_id from token or lookup by email
+        user_id = payload.get("user_id")
+        logger.info(f"user_id from token: {user_id}")
+        
+        if not user_id:
+            # Token has email in 'sub', need to look up user_id
+            email = payload.get("sub")
+            logger.info(f"Looking up user by email: {email}")
+            if email:
+                # Get database session
+                from database import SessionLocal
+                db = SessionLocal()
+                try:
+                    user = user_repository.get_by_email(db, email)
+                    if user:
+                        user_id = user.id
+                        logger.info(f"Found user_id from database: {user_id}")
+                finally:
+                    db.close()
+        
+        if not user_id:
+            logger.error("Could not determine user_id from token")
+            await websocket.accept()
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+            
+        # Convert to string for consistency
+        user_id = str(user_id)
+        logger.info(f"User authenticated: {user_id}")
+        
     except Exception as e:
-        logger.error(f"WebSocket authentication failed: {e}")
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        logger.error(f"WebSocket authentication failed: {e}", exc_info=True)
+        try:
+            await websocket.accept()
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        except:
+            pass
         return
     
     # Connect user
@@ -325,8 +509,10 @@ async def websocket_endpoint(
             
             logger.info(f"Received WebSocket message from {user_id}: {message_type}")
             
-            # Handle different message types
-            if message_type == WSMessageType.WEBRTC_OFFER.value:
+            # Handle different message types (support both uppercase and lowercase)
+            msg_type_lower = message_type.lower() if message_type else ""
+            
+            if msg_type_lower == WSMessageType.WEBRTC_OFFER.value:
                 # Forward WebRTC offer to target peer
                 to_user_id = message_data.get("to_user_id")
                 if to_user_id:
@@ -337,7 +523,7 @@ async def websocket_endpoint(
                         data=message_data.get("offer")
                     )
             
-            elif message_type == WSMessageType.WEBRTC_ANSWER.value:
+            elif msg_type_lower == WSMessageType.WEBRTC_ANSWER.value:
                 # Forward WebRTC answer to target peer
                 to_user_id = message_data.get("to_user_id")
                 if to_user_id:
@@ -348,7 +534,7 @@ async def websocket_endpoint(
                         data=message_data.get("answer")
                     )
             
-            elif message_type == WSMessageType.WEBRTC_ICE_CANDIDATE.value:
+            elif msg_type_lower == WSMessageType.WEBRTC_ICE_CANDIDATE.value:
                 # Forward ICE candidate to target peer
                 to_user_id = message_data.get("to_user_id")
                 if to_user_id:
@@ -358,7 +544,84 @@ async def websocket_endpoint(
                         signal_type=WSMessageType.WEBRTC_ICE_CANDIDATE.value,
                         data=message_data.get("candidate")
                     )
-            
+
+            elif msg_type_lower in ("call_accepted",):
+                # Callee accepted the call
+                to_user_id = message_data.get("to_user_id")
+                call_id = message_data.get("call_id")
+                
+                if call_id:
+                    # Add accepter to signaling manager
+                    call_signaling_manager.add_to_call(call_id, user_id)
+                    
+                    # Get existing participants in the call
+                    existing = call_signaling_manager.get_call_participants(call_id)
+                    existing_list = [uid for uid in existing if uid != user_id]
+                    
+                    # Notify existing participants → they will create offers to new user
+                    for pid in existing_list:
+                        await call_signaling_manager.send_to_user(pid, {
+                            "type": "PARTICIPANT_JOINED",
+                            "data": {
+                                "call_id": call_id,
+                                "user_id": user_id
+                            }
+                        })
+                
+                # Also forward CALL_ACCEPTED for UI update
+                if to_user_id:
+                    await call_signaling_manager.send_to_user(to_user_id, {
+                        "type": "CALL_ACCEPTED",
+                        "from_user_id": user_id,
+                        "data": message_data
+                    })
+
+            elif msg_type_lower in ("call_declined",):
+                # Callee declined → forward to caller
+                to_user_id = message_data.get("to_user_id")
+                if to_user_id:
+                    await call_signaling_manager.send_to_user(to_user_id, {
+                        "type": "CALL_DECLINED",
+                        "from_user_id": user_id,
+                        "data": message_data
+                    })
+
+            elif msg_type_lower in ("call_ended",):
+                # User leaving / ending call
+                call_id = message_data.get("call_id")
+                to_user_id = message_data.get("to_user_id")
+                
+                if call_id:
+                    # Remove from signaling manager
+                    call_signaling_manager.remove_from_call(call_id, user_id)
+                    remaining = call_signaling_manager.get_call_participants(call_id)
+                    
+                    if len(remaining) <= 1:
+                        # Last person or empty → end call for everyone
+                        for pid in remaining:
+                            await call_signaling_manager.send_to_user(pid, {
+                                "type": "CALL_ENDED",
+                                "from_user_id": user_id,
+                                "data": {"call_id": call_id}
+                            })
+                        # Clean up
+                        if call_id in call_signaling_manager.call_participants:
+                            del call_signaling_manager.call_participants[call_id]
+                    else:
+                        # Group call: notify others this user left
+                        for pid in remaining:
+                            await call_signaling_manager.send_to_user(pid, {
+                                "type": "PARTICIPANT_LEFT",
+                                "data": {"call_id": call_id, "user_id": user_id}
+                            })
+                elif to_user_id:
+                    # No call_id, just forward directly (backward compat)
+                    await call_signaling_manager.send_to_user(to_user_id, {
+                        "type": "CALL_ENDED",
+                        "from_user_id": user_id,
+                        "data": message_data
+                    })
+
             else:
                 logger.warning(f"Unknown message type: {message_type}")
     

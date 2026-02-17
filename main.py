@@ -23,9 +23,9 @@ logger = logging.getLogger(__name__)
 auth_models.Base.metadata.create_all(bind=engine)
 video_models.Base.metadata.create_all(bind=engine)
 streaming_models.Base.metadata.create_all(bind=engine)
-call_models.Base.metadata.create_all(bind=engine)
+call_models.Base.metadata.create_all(bind=engine)  # Enabled for calls
 
-app = FastAPI(title="Video Server API")
+app = FastAPI(title="Video Server API", version="1.0.1")
 
 app.add_middleware(
     CORSMiddleware,
@@ -128,6 +128,23 @@ async def serve_broadcaster_jwt():
 async def serve_viewer_jwt():
     """Serve the JWT viewer HTML page"""
     return FileResponse("viewer_jwt.html")
+
+# Simple test page for video calls
+@app.get("/simple-video-call")
+async def serve_simple_video_call():
+    """Serve simple video call test page"""
+    logger.info("Serving simple video call test page")
+    return FileResponse("simple_video_call.html")
+
+@app.get("/whatsapp_call_test.html")
+async def serve_whatsapp_call_test():
+    """Serve the WhatsApp call test HTML page"""
+    return FileResponse("whatsapp_call_test.html")
+
+@app.get("/whatsapp_call_test_backup.html")
+async def serve_whatsapp_call_test_backup():
+    """Serve the WhatsApp call test backup HTML page"""
+    return FileResponse("whatsapp_call_test_backup.html")
 
 if __name__ == "__main__":
     import uvicorn
