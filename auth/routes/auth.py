@@ -287,8 +287,11 @@ async def login_user(user_data: UserLogin, db: Session = Depends(get_db)):
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Account is disabled"
             )
-          # Create access token
-        access_token = create_access_token(data={"sub": user.email})
+          # Create access token with user_id
+        access_token = create_access_token(data={
+            "sub": user.email,
+            "user_id": user.id
+        })
         
         logger.info(f"User logged in successfully: {user.email}")
         return TokenResponse(

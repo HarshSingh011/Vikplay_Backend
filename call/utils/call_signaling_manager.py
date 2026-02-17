@@ -169,6 +169,35 @@ class CallSignalingManager:
         await self.send_to_user(to_user_id, message)
         logger.info(f"WebRTC signal {signal_type} sent from {from_user_id} to {to_user_id}")
 
+    async def send_call_notification(
+        self,
+        to_user_id: str,
+        call_id: str,
+        from_user_id: str,
+        from_username: str
+    ):
+        """
+        Send incoming call notification to a user (WhatsApp-style).
+        
+        Args:
+            to_user_id: User receiving the call
+            call_id: Call ID
+            from_user_id: User initiating the call
+            from_username: Username of caller
+        """
+        message = {
+            "type": "INCOMING_CALL",
+            "data": {
+                "call_id": call_id,
+                "from_user_id": from_user_id,
+                "from_username": from_username
+            },
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+        await self.send_to_user(to_user_id, message)
+        logger.info(f"Incoming call notification sent to {to_user_id} from {from_user_id}")
+
     async def notify_participant_joined(
         self,
         call_id: str,
