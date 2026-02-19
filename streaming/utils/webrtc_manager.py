@@ -98,6 +98,22 @@ class WebRTCManager:
                 "error": "Broadcaster not available"
             }
         
+        # Block the broadcaster/host from joining their own stream as a viewer
+        broadcaster = self.broadcasters[stream_id]
+        if broadcaster.user_id == user_id:
+            await websocket.send_json({
+                "type": "error",
+                "message": "You cannot join your own stream as a viewer"
+            })
+            try:
+                await websocket.close(code=4006, reason="Cannot join your own stream as a viewer")
+            except Exception:
+                pass
+            return {
+                "success": False,
+                "error": "Host cannot join their own stream as a viewer"
+            }
+        
         connection = WebRTCConnection(websocket, user_id, 'viewer', stream_id)
         
         if stream_id not in self.viewers:
@@ -149,19 +165,21 @@ class WebRTCManager:
             if user_id in self.active_streams_by_user:
                 del self.active_streams_by_user[user_id]
             
-            # Notify all viewers that stream ended
+            # Notify all viewers that stream ended and close their connections
             if stream_id in self.viewers:
                 for viewer in list(self.viewers[stream_id]):
                     try:
                         if viewer.websocket in self.connections:
-                            asyncio.create_task(viewer.websocket.send_json({
-                                "type": "broadcaster_disconnected",
-                                "message": "Stream has ended"
-                            }))
+                            # Send stream ended notification
+                            asyncio.create_task(
+                                self._notify_and_close_viewer(viewer)
+                            )
+                            # Remove viewer from connections map
+                            del self.connections[viewer.websocket]
                     except Exception as e:
-                        logger.error(f"Error notifying viewer: {e}")
+                        logger.error(f"Error notifying/closing viewer: {e}")
                 
-                # Clear viewers
+                # Clear all viewers for this stream
                 del self.viewers[stream_id]
             
             logger.info(f"Broadcaster disconnected: user_id={user_id}, stream_id={stream_id}")
@@ -260,6 +278,20 @@ class WebRTCManager:
         # Clean up disconnected viewers
         for viewer in disconnected:
             self.disconnect(viewer.websocket)
+
+    async def _notify_and_close_viewer(self, viewer: WebRTCConnection):
+        """Send stream-ended notification to a viewer and close their WebSocket"""
+        try:
+            await viewer.websocket.send_json({
+                "type": "stream_ended",
+                "message": "The broadcaster has stopped streaming. Stream is now closed."
+            })
+        except Exception as e:
+            logger.error(f"Error sending stream_ended to viewer {viewer.user_id}: {e}")
+        try:
+            await viewer.websocket.close(code=4007, reason="Broadcaster stopped streaming")
+        except Exception as e:
+            logger.error(f"Error closing viewer websocket {viewer.user_id}: {e}")
 
     def get_viewer_count(self, stream_id: int) -> int:
         """Get the number of viewers for a stream"""

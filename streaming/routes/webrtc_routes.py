@@ -313,6 +313,15 @@ async def webrtc_view_websocket(
         stream = service.get_stream(stream_id)
         if stream:
             logger.info(f"Stream {stream_id} found in database")
+            # Block broadcaster from joining their own stream as viewer
+            if stream["stream"].user_id == user_id:
+                logger.warning(f"User {user_id} tried to view their own stream {stream_id}")
+                await websocket.send_json({
+                    "type": "error",
+                    "message": "You cannot join your own stream as a viewer"
+                })
+                await websocket.close(code=4006, reason="Cannot view own stream")
+                return
     except Exception as e:
         # Stream doesn't exist in DB - that's OK, WebRTC will still work if broadcaster is connected
         logger.info(f"Stream {stream_id} not in database, proceeding with WebRTC only: {e}")
