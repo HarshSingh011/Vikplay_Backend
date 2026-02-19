@@ -279,6 +279,56 @@ class WebRTCManager:
         for viewer in disconnected:
             self.disconnect(viewer.websocket)
 
+    async def broadcast_chat_message(self, stream_id: int, user_id: int, username: str, message: str, role: str = "viewer"):
+        """Broadcast a chat message to everyone in the stream (broadcaster + all viewers)"""
+        chat_data = {
+            "type": "chat_message",
+            "stream_id": stream_id,
+            "user_id": user_id,
+            "username": username,
+            "message": message,
+            "role": role,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+
+        # Send to broadcaster
+        if stream_id in self.broadcasters:
+            try:
+                await self.broadcasters[stream_id].websocket.send_json(chat_data)
+            except Exception as e:
+                logger.error(f"Error sending chat to broadcaster: {e}")
+
+        # Send to all viewers
+        if stream_id in self.viewers:
+            disconnected = set()
+            for viewer in self.viewers[stream_id]:
+                try:
+                    await viewer.websocket.send_json(chat_data)
+                except Exception as e:
+                    logger.error(f"Error sending chat to viewer: {e}")
+                    disconnected.add(viewer)
+            for viewer in disconnected:
+                self.disconnect(viewer.websocket)
+
+    async def relay_sync_timestamp(self, stream_id: int, broadcaster_ts: float):
+        """Relay broadcaster's sync timestamp to all viewers so they can measure delay"""
+        sync_data = {
+            "type": "sync_timestamp",
+            "stream_id": stream_id,
+            "broadcaster_ts": broadcaster_ts,
+            "server_ts": datetime.utcnow().timestamp()
+        }
+        await self.broadcast_to_viewers(stream_id, sync_data)
+
+    async def request_go_live(self, stream_id: int, viewer_id: int):
+        """Viewer requests to jump to live — ask broadcaster to send a keyframe"""
+        if stream_id in self.broadcasters:
+            await self.send_to_broadcaster(stream_id, {
+                "type": "keyframe_request",
+                "viewer_id": viewer_id
+            })
+            logger.info(f"Keyframe requested by viewer {viewer_id} for stream {stream_id}")
+
     async def _notify_and_close_viewer(self, viewer: WebRTCConnection):
         """Send stream-ended notification to a viewer and close their WebSocket"""
         try:
