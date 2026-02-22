@@ -7,17 +7,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     gcc \
     supervisor \
-    pkg-config \
-    libavformat-dev \
-    libavcodec-dev \
-    libavdevice-dev \
-    libavutil-dev \
-    libavfilter-dev \
-    libswscale-dev \
-    libswresample-dev \
-    libopus-dev \
-    libvpx-dev \
-    libsrtp2-dev \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
