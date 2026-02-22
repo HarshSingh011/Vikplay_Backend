@@ -10,42 +10,15 @@ from auth.schemas import (
 )
 from auth.models import User, OTP, PendingRegistration
 from auth.utils.email import email_utils
-import bcrypt
-import jwt
-import secrets
+from auth.utils.password import password_utils
+from auth.utils.otp import otp_utils
+from auth.utils.jwt_token import jwt_utils
 from datetime import datetime, timedelta
-import os
 import logging
 
 logger = logging.getLogger(__name__)
 
-# Create router
 router = APIRouter()
-
-# Configuration
-SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key")
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
-
-def hash_password(password: str) -> str:
-    """Hash password using bcrypt"""
-    salt = bcrypt.gensalt()
-    return bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
-
-def verify_password(password: str, hashed: str) -> bool:
-    """Verify password against hash"""
-    return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
-
-def create_access_token(data: dict) -> str:
-    """Create JWT access token"""
-    to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire, "type": "access"})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-
-def generate_otp() -> str:
-    """Generate 6-digit OTP"""
-    return ''.join([str(secrets.randbelow(10)) for _ in range(6)])
 
 def send_otp_email_background(to_email: str, otp_code: str, username: str):
     """Send OTP email in background (non-blocking)"""
@@ -87,7 +60,7 @@ async def register_user(user_data: UserCreate, background_tasks: BackgroundTasks
             db.commit()
         
         # Hash password
-        hashed_password = hash_password(user_data.password)
+        hashed_password = password_utils.hash_password(user_data.password)
         
         # Create pending registration record
         pending_registration = PendingRegistration(
@@ -100,8 +73,8 @@ async def register_user(user_data: UserCreate, background_tasks: BackgroundTasks
         db.commit()
         
         # Generate and store OTP
-        otp_code = generate_otp()
-        expires_at = datetime.utcnow() + timedelta(minutes=10)  # 10 minute expiry
+        otp_code = otp_utils.generate_otp(6)
+        expires_at = datetime.utcnow() + timedelta(minutes=10)
         
         otp_record = OTP(
             email=user_data.email,
@@ -219,8 +192,8 @@ async def login_user(user_data: UserLogin, db: Session = Depends(get_db)):
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid email or password"
             )
-          # Verify password
-        if not verify_password(user_data.password, user.hashed_password):
+        # Verify password
+        if not password_utils.verify_password(user_data.password, user.hashed_password):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid email or password"
@@ -237,8 +210,8 @@ async def login_user(user_data: UserLogin, db: Session = Depends(get_db)):
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Account is disabled"
             )
-          # Create access token with user_id
-        access_token = create_access_token(data={
+        # Create access token
+        access_token = jwt_utils.create_access_token(data={
             "sub": user.email,
             "user_id": user.id
         })
