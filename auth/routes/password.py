@@ -1,72 +1,41 @@
 """
 Password-related routes - forgot password, reset password
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from database import get_db
 from auth.schemas import EmailVerify, OTPVerify, PasswordReset, MessageResponse
 from auth.models import User, OTP
+from auth.utils.email import email_utils
 import bcrypt
 import secrets
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timedelta
 import os
 import logging
-from dotenv import load_dotenv
-
-# Load environment variables - force override
-load_dotenv(override=True)
 
 logger = logging.getLogger(__name__)
 
 # Create router
 router = APIRouter()
 
-# Email configuration
-SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
-SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-EMAIL_USERNAME = os.getenv("EMAIL_USERNAME", "")
-EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD", "")
-FROM_EMAIL = os.getenv("FROM_EMAIL", EMAIL_USERNAME)
-
 def generate_otp() -> str:
     """Generate 6-digit OTP"""
     return ''.join([str(secrets.randbelow(10)) for _ in range(6)])
-
-def send_email(to_email: str, subject: str, body: str) -> bool:
-    """Send email via SMTP"""
-    try:
-        if not EMAIL_USERNAME or not EMAIL_PASSWORD:
-            logger.info(f"EMAIL CONSOLE MODE - To: {to_email}, Subject: {subject}")
-            return True
-            
-        msg = MIMEMultipart()
-        msg['From'] = FROM_EMAIL
-        msg['To'] = to_email
-        msg['Subject'] = subject
-        msg.attach(MIMEText(body, 'html'))
-        
-        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
-        server.starttls()
-        server.login(EMAIL_USERNAME, EMAIL_PASSWORD)
-        server.sendmail(FROM_EMAIL, to_email, msg.as_string())
-        server.quit()
-        
-        logger.info(f"Email sent successfully to {to_email}")
-        return True
-    except Exception as e:
-        logger.error(f"Failed to send email to {to_email}: {str(e)}")
-        return False
 
 def hash_password(password: str) -> str:
     """Hash password using bcrypt"""
     salt = bcrypt.gensalt()
     return bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
 
+def send_reset_email_background(to_email: str, otp_code: str):
+    """Send password reset OTP in background (non-blocking)"""
+    try:
+        email_utils.send_otp_email(to_email, otp_code, "password reset")
+    except Exception as e:
+        logger.error(f"Background password reset email failed for {to_email}: {e}")
+
 @router.post("/forgot-password", response_model=MessageResponse)
-async def forgot_password(email_data: EmailVerify, db: Session = Depends(get_db)):
+async def forgot_password(email_data: EmailVerify, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     """
     Send OTP for password reset
     """
@@ -103,31 +72,10 @@ async def forgot_password(email_data: EmailVerify, db: Session = Depends(get_db)
         )
         db.add(otp_record)
         db.commit()
-        
-        # Send OTP email
-        subject = "VikPay - Password Reset OTP"
-        body = f"""
-        <html>
-        <body>
-            <h2>Password Reset Request</h2>
-            <p>You have requested to reset your password for your VikPay account.</p>
-            <p>Please use the following OTP to reset your password:</p>
-            <div style="background-color: #f0f0f0; padding: 20px; text-align: center; margin: 20px 0;">
-                <h3 style="color: #007bff; font-size: 24px; letter-spacing: 5px;">{otp_code}</h3>
-            </div>
-            <p>This OTP will expire in 10 minutes.</p>
-            <p>If you did not request a password reset, please ignore this email.</p>
-            <br>
-            <p>Best regards,<br>VikPay Team</p>
-        </body>
-        </html>
-        """
-        email_sent = send_email(email_data.email, subject, body)
-        
-        if not email_sent:
-            logger.warning(f"Failed to send password reset OTP to {email_data.email}")
-            # Don't fail the request for security reasons, just log it
-        
+
+        # Send OTP email in background (non-blocking)
+        background_tasks.add_task(send_reset_email_background, email_data.email, otp_code)
+
         logger.info(f"Password reset OTP process completed for: {email_data.email}")
         return MessageResponse(
             message="If the email exists, you will receive a password reset OTP.",

@@ -1,27 +1,21 @@
 """
 Authentication routes - register, login, verify
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from database import get_db
 from auth.schemas import (
-    UserCreate, UserLogin, UserResponse, OTPVerify, 
+    UserCreate, UserLogin, UserResponse, OTPVerify,
     TokenResponse, MessageResponse
 )
 from auth.models import User, OTP, PendingRegistration
+from auth.utils.email import email_utils
 import bcrypt
 import jwt
 import secrets
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timedelta
 import os
 import logging
-from dotenv import load_dotenv
-
-# Load environment variables - force override
-load_dotenv(override=True)
 
 logger = logging.getLogger(__name__)
 
@@ -31,14 +25,7 @@ router = APIRouter()
 # Configuration
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
-
-# Email configuration
-SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
-SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-EMAIL_USERNAME = os.getenv("EMAIL_USERNAME", "")
-EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD", "")
-FROM_EMAIL = os.getenv("FROM_EMAIL", EMAIL_USERNAME)
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
 
 def hash_password(password: str) -> str:
     """Hash password using bcrypt"""
@@ -53,43 +40,22 @@ def create_access_token(data: dict) -> str:
     """Create JWT access token"""
     to_encode = data.copy()
     expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({
-        "exp": expire,
-        "type": "access"  # Add type field for token verification
-    })
+    to_encode.update({"exp": expire, "type": "access"})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 def generate_otp() -> str:
     """Generate 6-digit OTP"""
     return ''.join([str(secrets.randbelow(10)) for _ in range(6)])
 
-def send_email(to_email: str, subject: str, body: str) -> bool:
-    """Send email via SMTP"""
+def send_otp_email_background(to_email: str, otp_code: str, username: str):
+    """Send OTP email in background (non-blocking)"""
     try:
-        if not EMAIL_USERNAME or not EMAIL_PASSWORD:
-            logger.info(f"EMAIL CONSOLE MODE - To: {to_email}, Subject: {subject}")
-            return True
-            
-        msg = MIMEMultipart()
-        msg['From'] = FROM_EMAIL
-        msg['To'] = to_email
-        msg['Subject'] = subject
-        msg.attach(MIMEText(body, 'html'))
-        
-        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
-        server.starttls()
-        server.login(EMAIL_USERNAME, EMAIL_PASSWORD)
-        server.sendmail(FROM_EMAIL, to_email, msg.as_string())
-        server.quit()
-        
-        logger.info(f"Email sent successfully to {to_email}")
-        return True
+        email_utils.send_otp_email(to_email, otp_code, "registration")
     except Exception as e:
-        logger.error(f"Failed to send email to {to_email}: {str(e)}")
-        return False
+        logger.error(f"Background email send failed for {to_email}: {e}")
 
 @router.post("/register", response_model=MessageResponse)
-async def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
+async def register_user(user_data: UserCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     """
     Register a new user and send OTP for email verification.
     User will only be created in database after OTP verification.
@@ -144,27 +110,11 @@ async def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
             expires_at=expires_at
         )
         db.add(otp_record)
-        db.commit()        # Send OTP email
-        subject = "VikPay - Verify Your Registration"
-        body = f"""
-        <html>
-        <body>
-            <h2>Welcome to VikPay, {user_data.username}!</h2>
-            <p>Thank you for registering with us. To complete your registration, please verify your email address using the OTP below:</p>
-            <div style="background-color: #f0f0f0; padding: 20px; text-align: center; margin: 20px 0;">
-                <h3 style="color: #007bff; font-size: 24px; letter-spacing: 5px;">{otp_code}</h3>
-            </div>
-            <p>This OTP will expire in 10 minutes.</p>            <p>If you didn't create an account with VikPay, please ignore this email.</p>
-            <br>
-            <p>Best regards,<br>VikPay Team</p>
-        </body>
-        </html>
-        """
-        email_sent = send_email(user_data.email, subject, body)
-        
-        if not email_sent:
-            logger.warning(f"Failed to send registration OTP to {user_data.email}")
-        
+        db.commit()
+
+        # Send OTP email in background (non-blocking - response returns immediately)
+        background_tasks.add_task(send_otp_email_background, user_data.email, otp_code, user_data.username)
+
         logger.info(f"Pending registration created for: {user_data.email}")
         return MessageResponse(
             message="Registration initiated! Please check your email for OTP verification. Complete verification within 24 hours.",

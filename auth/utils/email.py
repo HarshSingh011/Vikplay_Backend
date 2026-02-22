@@ -48,11 +48,10 @@ class EmailUtils:
         return True
     
     def _create_connection(self) -> Optional[smtplib.SMTP]:
-        """Create SMTP connection"""
+        """Create SMTP connection with 5-second timeout to fail fast"""
         try:
-            # Create SMTP session
-            server = smtplib.SMTP(self.smtp_server, self.smtp_port)
-            server.starttls()  # Enable security
+            server = smtplib.SMTP(self.smtp_server, self.smtp_port, timeout=5)
+            server.starttls()
             server.login(self.sender_email, self.sender_password)
             return server
         except Exception as e:
