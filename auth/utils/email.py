@@ -48,25 +48,33 @@ class EmailUtils:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _force_ipv4(self):
+    def _connect_ipv4(self, host: str, port: int, timeout: int = 30):
         """
-        Monkeypatch socket.getaddrinfo to return only IPv4 results.
-        Needed on Render/Docker where IPv6 routes are missing, causing
-        \'Network is unreachable\' when smtp.gmail.com resolves to IPv6 first.
-        Returns the original function so it can be restored.
+        Create a TCP socket that is forcibly connected over IPv4.
+        Returns (raw_socket, ipv4_addr_used).
+        Avoids 'Network is unreachable' / timeout caused by IPv6 being
+        tried first on Render containers where IPv6 routes don't exist.
         """
-        orig = socket.getaddrinfo
-
-        def ipv4_only(host, port, family=0, type=0, proto=0, flags=0):
-            return orig(host, port, socket.AF_INET, type, proto, flags)
-
-        socket.getaddrinfo = ipv4_only
-        return orig
+        # getaddrinfo with AF_INET returns only IPv4 results
+        infos = socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_STREAM)
+        if not infos:
+            raise OSError(f"No IPv4 address found for {host}")
+        ipv4_addr = infos[0][4][0]
+        logger.info(f"Resolved {host} → {ipv4_addr} (IPv4)")
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(timeout)
+        sock.connect((ipv4_addr, port))
+        return sock, ipv4_addr
 
     def _send_smtp(self, to_email: str, subject: str, body: str, html_body: str) -> bool:
-        """Send via SMTP. Uses SMTP_SSL (port 465) or STARTTLS (port 587)."""
-        orig_getaddrinfo = self._force_ipv4()
-        server_addr = f"{self.smtp_server}:{self.smtp_port}"
+        """
+        Send via SMTP using an explicitly IPv4-connected socket.
+        Port 465 → SMTP_SSL (implicit TLS).
+        Port 587 → SMTP + STARTTLS.
+        The TLS cert is always validated against the real hostname.
+        """
+        host = self.smtp_server
+        port = self.smtp_port
         try:
             msg = MIMEMultipart("alternative")
             msg["From"] = f"{self.sender_name} <{self.from_email}>"
@@ -75,26 +83,46 @@ class EmailUtils:
             msg.attach(MIMEText(body, "plain"))
             msg.attach(MIMEText(html_body, "html"))
 
-            logger.info(f"Connecting to SMTP {server_addr} (port {self.smtp_port})")
-            if self.smtp_port == 465:
-                ctx = ssl.create_default_context()
-                server = smtplib.SMTP_SSL(self.smtp_server, self.smtp_port, context=ctx, timeout=15)
+            logger.info(f"Connecting to {host}:{port} over IPv4 ...")
+            raw_sock, ipv4 = self._connect_ipv4(host, port)
+
+            ctx = ssl.create_default_context()
+
+            if port == 465:
+                # Wrap the pre-connected IPv4 socket in TLS.
+                # server_hostname=host ensures cert is verified against smtp.gmail.com.
+                ssl_sock = ctx.wrap_socket(raw_sock, server_hostname=host)
+                server = smtplib.SMTP()
+                server.sock = ssl_sock
+                server.file = ssl_sock.makefile("rb")
+                server._host = host
+                # Read the 220 greeting the server sends on connect
+                code, msg = server.getreply()
+                if code != 220:
+                    raise smtplib.SMTPConnectError(code, msg)
+                server.ehlo(host)
             else:
-                server = smtplib.SMTP(self.smtp_server, self.smtp_port, timeout=15)
-                server.ehlo()
-                server.starttls()
-                server.ehlo()
+                # STARTTLS over plain TCP first
+                server = smtplib.SMTP()
+                server.sock = raw_sock
+                server.file = raw_sock.makefile("rb")
+                server._host = host
+                # Read the 220 greeting
+                code, msg = server.getreply()
+                if code != 220:
+                    raise smtplib.SMTPConnectError(code, msg)
+                server.ehlo(host)
+                server.starttls(context=ctx)
+                server.ehlo(host)
 
             server.login(self.sender_email, self.sender_password)
             server.sendmail(self.sender_email, to_email, msg.as_string())
             server.quit()
-            logger.info(f"Email sent to {to_email}")
+            logger.info(f"Email sent to {to_email} via {ipv4}:{port}")
             return True
         except Exception as e:
-            logger.error(f"SMTP failed ({server_addr}): {e}")
+            logger.error(f"SMTP failed ({host}:{port}): {e}")
             return False
-        finally:
-            socket.getaddrinfo = orig_getaddrinfo  # always restore
 
     def _send_console(self, to_email: str, subject: str, body: str) -> bool:
         """Print email to console (development/testing mode)."""
