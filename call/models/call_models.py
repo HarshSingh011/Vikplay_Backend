@@ -77,7 +77,7 @@ class CallParticipant(Base):
     
     # Foreign keys
     call_id = Column(String, ForeignKey("calls.id", ondelete="CASCADE"), nullable=False)
-    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     
     # Participant details
     role = Column(SQLEnum(ParticipantRoleEnum), nullable=False)
@@ -87,7 +87,7 @@ class CallParticipant(Base):
     peer_id = Column(String, nullable=True)  # Unique identifier for WebRTC peer connection
     
     # Added by (for tracking who invited this participant)
-    invited_by_user_id = Column(String, ForeignKey("users.id"), nullable=True)
+    invited_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     
     # Timestamps
     invited_at = Column(DateTime, default=datetime.utcnow, nullable=False)
