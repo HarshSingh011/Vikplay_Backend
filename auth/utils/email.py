@@ -1,10 +1,13 @@
 """
-Email utilities - pure SMTP, works with Gmail on port 465 (SSL) or 587 (STARTTLS).
-Forces IPv4 to avoid "Network is unreachable" errors on Render (IPv6 not routed).
+Email utilities - SMTP with automatic IPv6/IPv4 fallback and port fallback.
+Tries every combination: (IPv6, port 465) → (IPv6, port 587) →
+                         (IPv4, port 465) → (IPv4, port 587)
+Uses standard smtplib with the real hostname so TLS cert validation works correctly.
 """
 import ssl
 import socket
 import smtplib
+from contextlib import contextmanager
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from typing import Optional
@@ -14,8 +17,29 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+@contextmanager
+def _force_addr_family(family: int):
+    """
+    Context manager: temporarily patches socket.getaddrinfo so it only
+    returns addresses of the given family (AF_INET6 or AF_INET).
+    smtplib uses getaddrinfo internally, so patching it here makes SMTP_SSL
+    connect over the desired protocol while still using the real hostname for
+    TLS SNI / certificate validation.
+    """
+    original = socket.getaddrinfo
+
+    def patched(host, port, fam=0, type=0, proto=0, flags=0):
+        return original(host, port, family, type, proto, flags)
+
+    socket.getaddrinfo = patched
+    try:
+        yield
+    finally:
+        socket.getaddrinfo = original
+
+
 class EmailUtils:
-    """SMTP email sender with IPv4 forcing and SSL/STARTTLS auto-selection."""
+    """SMTP email sender - auto-selects IPv6/IPv4 and SSL/STARTTLS."""
 
     def __init__(self):
         self.sender_name = os.getenv("SENDER_NAME", "VikPay")
@@ -48,81 +72,76 @@ class EmailUtils:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _connect_ipv4(self, host: str, port: int, timeout: int = 30):
+    def _try_connect(self, host: str, port: int, family: int) -> Optional[smtplib.SMTP]:
         """
-        Create a TCP socket that is forcibly connected over IPv4.
-        Returns (raw_socket, ipv4_addr_used).
-        Avoids 'Network is unreachable' / timeout caused by IPv6 being
-        tried first on Render containers where IPv6 routes don't exist.
+        Attempt one SMTP connection using the given address family and port.
+        Returns a logged-in SMTP server object, or None on failure.
+        Port 465 → SMTP_SSL (immediate TLS).
+        Port 587 → SMTP + STARTTLS.
         """
-        # getaddrinfo with AF_INET returns only IPv4 results
-        infos = socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_STREAM)
-        if not infos:
-            raise OSError(f"No IPv4 address found for {host}")
-        ipv4_addr = infos[0][4][0]
-        logger.info(f"Resolved {host} → {ipv4_addr} (IPv4)")
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(timeout)
-        sock.connect((ipv4_addr, port))
-        return sock, ipv4_addr
+        family_name = "IPv6" if family == socket.AF_INET6 else "IPv4"
+        mode = "SSL" if port == 465 else "STARTTLS"
+        logger.info(f"Trying {host}:{port} via {family_name} ({mode}) ...")
+        try:
+            ctx = ssl.create_default_context()
+            with _force_addr_family(family):
+                if port == 465:
+                    server = smtplib.SMTP_SSL(host, port, context=ctx, timeout=20)
+                else:
+                    server = smtplib.SMTP(host, port, timeout=20)
+                    server.ehlo()
+                    server.starttls(context=ctx)
+                    server.ehlo()
+            server.login(self.sender_email, self.sender_password)
+            logger.info(f"Connected via {family_name}:{port}")
+            return server
+        except Exception as e:
+            logger.warning(f"  {family_name}:{port} failed — {e}")
+            return None
 
     def _send_smtp(self, to_email: str, subject: str, body: str, html_body: str) -> bool:
         """
-        Send via SMTP using an explicitly IPv4-connected socket.
-        Port 465 → SMTP_SSL (implicit TLS).
-        Port 587 → SMTP + STARTTLS.
-        The TLS cert is always validated against the real hostname.
+        Build message, then try every combination until one succeeds:
+          1. IPv6 + configured port
+          2. IPv4 + configured port
+          3. IPv6 + alternate port (465↔587)
+          4. IPv4 + alternate port
         """
         host = self.smtp_server
         port = self.smtp_port
-        try:
-            msg = MIMEMultipart("alternative")
-            msg["From"] = f"{self.sender_name} <{self.from_email}>"
-            msg["To"] = to_email
-            msg["Subject"] = subject
-            msg.attach(MIMEText(body, "plain"))
-            msg.attach(MIMEText(html_body, "html"))
+        alt_port = 587 if port == 465 else 465
 
-            logger.info(f"Connecting to {host}:{port} over IPv4 ...")
-            raw_sock, ipv4 = self._connect_ipv4(host, port)
+        attempts = [
+            (socket.AF_INET6, port),
+            (socket.AF_INET,  port),
+            (socket.AF_INET6, alt_port),
+            (socket.AF_INET,  alt_port),
+        ]
 
-            ctx = ssl.create_default_context()
+        msg = MIMEMultipart("alternative")
+        msg["From"] = f"{self.sender_name} <{self.from_email}>"
+        msg["To"] = to_email
+        msg["Subject"] = subject
+        msg.attach(MIMEText(body, "plain"))
+        msg.attach(MIMEText(html_body, "html"))
 
-            if port == 465:
-                # Wrap the pre-connected IPv4 socket in TLS.
-                # server_hostname=host ensures cert is verified against smtp.gmail.com.
-                ssl_sock = ctx.wrap_socket(raw_sock, server_hostname=host)
-                server = smtplib.SMTP()
-                server.sock = ssl_sock
-                server.file = ssl_sock.makefile("rb")
-                server._host = host
-                # Read the 220 greeting the server sends on connect
-                code, msg = server.getreply()
-                if code != 220:
-                    raise smtplib.SMTPConnectError(code, msg)
-                server.ehlo(host)
-            else:
-                # STARTTLS over plain TCP first
-                server = smtplib.SMTP()
-                server.sock = raw_sock
-                server.file = raw_sock.makefile("rb")
-                server._host = host
-                # Read the 220 greeting
-                code, msg = server.getreply()
-                if code != 220:
-                    raise smtplib.SMTPConnectError(code, msg)
-                server.ehlo(host)
-                server.starttls(context=ctx)
-                server.ehlo(host)
+        for family, p in attempts:
+            server = self._try_connect(host, p, family)
+            if server:
+                try:
+                    server.sendmail(self.sender_email, to_email, msg.as_string())
+                    server.quit()
+                    logger.info(f"Email sent to {to_email}")
+                    return True
+                except Exception as e:
+                    logger.warning(f"Send failed after connect: {e}")
+                    try:
+                        server.quit()
+                    except Exception:
+                        pass
 
-            server.login(self.sender_email, self.sender_password)
-            server.sendmail(self.sender_email, to_email, msg.as_string())
-            server.quit()
-            logger.info(f"Email sent to {to_email} via {ipv4}:{port}")
-            return True
-        except Exception as e:
-            logger.error(f"SMTP failed ({host}:{port}): {e}")
-            return False
+        logger.error(f"All SMTP attempts failed for {to_email}")
+        return False
 
     def _send_console(self, to_email: str, subject: str, body: str) -> bool:
         """Print email to console (development/testing mode)."""
