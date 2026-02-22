@@ -15,6 +15,17 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Startup diagnostic — confirms which code version is deployed
+_resend_key = os.getenv("RESEND_API_KEY", "").strip()
+_sendgrid_key = os.getenv("SENDGRID_API_KEY", "").strip()
+if _resend_key:
+    print(f"[EMAIL] Resend API key detected: {_resend_key[:8]}... (len={len(_resend_key)})")
+elif _sendgrid_key:
+    print(f"[EMAIL] SendGrid API key detected (len={len(_sendgrid_key)})")
+else:
+    print("[EMAIL] WARNING: No RESEND_API_KEY or SENDGRID_API_KEY found! Emails will only log to console.")
+    print(f"[EMAIL] All env vars with 'RESEND' or 'KEY': {[k for k in os.environ if 'RESEND' in k or 'SENDGRID' in k]}")
+
 
 class EmailUtils:
     """HTTP-based email sender. Uses Resend, then SendGrid, then console."""
