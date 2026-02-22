@@ -29,8 +29,9 @@ ENV PORT=8000
 EXPOSE 8000
 
 # Health check uses the PORT env var
-HEALTHsupervisor to manage both uvicorn and celery
-CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf
+HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:${PORT}/health || exit 1
 
-# Run the application (use shell form so ${PORT} expands)
+# Run supervisor to manage both uvicorn and celery
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
 CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]
