@@ -18,18 +18,31 @@ class EmailUtils:
     """SMTP email sender with IPv4 forcing and SSL/STARTTLS auto-selection."""
 
     def __init__(self):
-        self.smtp_server = os.getenv("SMTP_SERVER", "smtp.gmail.com")
-        self.smtp_port = int(os.getenv("SMTP_PORT", "465"))
-        self.sender_email = os.getenv("EMAIL_USERNAME", "")
-        self.sender_password = os.getenv("EMAIL_PASSWORD", "")
-        self.from_email = os.getenv("FROM_EMAIL", self.sender_email)
         self.sender_name = os.getenv("SENDER_NAME", "VikPay")
-        self.dev_mode = not (self.sender_email and self.sender_password)
 
-        if self.dev_mode:
-            logger.info("Email service: console mode (no SMTP credentials set)")
-        else:
-            logger.info(f"Email service: SMTP {self.smtp_server}:{self.smtp_port}")
+    @property
+    def smtp_server(self):
+        return os.getenv("SMTP_SERVER", "smtp.gmail.com")
+
+    @property
+    def smtp_port(self):
+        return int(os.getenv("SMTP_PORT", "465"))
+
+    @property
+    def sender_email(self):
+        return os.getenv("EMAIL_USERNAME", "")
+
+    @property
+    def sender_password(self):
+        return os.getenv("EMAIL_PASSWORD", "")
+
+    @property
+    def from_email(self):
+        return os.getenv("FROM_EMAIL", self.sender_email)
+
+    @property
+    def dev_mode(self):
+        return not (self.sender_email and self.sender_password)
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -53,6 +66,7 @@ class EmailUtils:
     def _send_smtp(self, to_email: str, subject: str, body: str, html_body: str) -> bool:
         """Send via SMTP. Uses SMTP_SSL (port 465) or STARTTLS (port 587)."""
         orig_getaddrinfo = self._force_ipv4()
+        server_addr = f"{self.smtp_server}:{self.smtp_port}"
         try:
             msg = MIMEMultipart("alternative")
             msg["From"] = f"{self.sender_name} <{self.from_email}>"
@@ -61,6 +75,7 @@ class EmailUtils:
             msg.attach(MIMEText(body, "plain"))
             msg.attach(MIMEText(html_body, "html"))
 
+            logger.info(f"Connecting to SMTP {server_addr} (port {self.smtp_port})")
             if self.smtp_port == 465:
                 ctx = ssl.create_default_context()
                 server = smtplib.SMTP_SSL(self.smtp_server, self.smtp_port, context=ctx, timeout=15)
@@ -76,7 +91,7 @@ class EmailUtils:
             logger.info(f"Email sent to {to_email}")
             return True
         except Exception as e:
-            logger.error(f"SMTP failed: {e}")
+            logger.error(f"SMTP failed ({server_addr}): {e}")
             return False
         finally:
             socket.getaddrinfo = orig_getaddrinfo  # always restore
