@@ -1,12 +1,14 @@
 """
-Email utilities - HTTP API (no SMTP, works on Render free tier).
+Email utilities - HTTP API (no SMTP needed, works on Render free tier).
 
-Primary:  Resend   → set RESEND_API_KEY
-Fallback: SendGrid → set SENDGRID_API_KEY
-Console:  neither key set → prints to logs (dev/test mode)
+Primary:  Brevo    -> set BREVO_API_KEY  (300 emails/day free, sends to ANYONE)
+Fallback: Resend   -> set RESEND_API_KEY  (3000/mo free, needs domain verification)
+Console:  neither set -> prints to logs
 
-Resend free tier:  3,000 emails/month  https://resend.com
-SendGrid free tier: 100 emails/day     https://sendgrid.com
+Brevo: https://brevo.com  (former Sendinblue)
+  - Sign up free, go to SMTP & API -> API Keys -> Generate
+  - Just verify your FROM_EMAIL sender address (not a domain)
+  - Can send to ANY recipient immediately
 """
 import requests
 from typing import Optional
@@ -15,28 +17,27 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Startup diagnostic — confirms which code version is deployed
-_resend_key = os.getenv("RESEND_API_KEY", "").strip()
-_sendgrid_key = os.getenv("SENDGRID_API_KEY", "").strip()
-if _resend_key:
-    print(f"[EMAIL] Resend API key detected: {_resend_key[:8]}... (len={len(_resend_key)})")
-elif _sendgrid_key:
-    print(f"[EMAIL] SendGrid API key detected (len={len(_sendgrid_key)})")
+# Startup diagnostic
+_brevo = os.getenv("BREVO_API_KEY", "").strip()
+_resend = os.getenv("RESEND_API_KEY", "").strip()
+if _brevo:
+    print(f"[EMAIL] Brevo API key detected: {_brevo[:8]}... (len={len(_brevo)})")
+elif _resend:
+    print(f"[EMAIL] Resend API key detected: {_resend[:8]}... (len={len(_resend)})")
 else:
-    print("[EMAIL] WARNING: No RESEND_API_KEY or SENDGRID_API_KEY found! Emails will only log to console.")
-    print(f"[EMAIL] All env vars with 'RESEND' or 'KEY': {[k for k in os.environ if 'RESEND' in k or 'SENDGRID' in k]}")
+    print("[EMAIL] WARNING: No BREVO_API_KEY or RESEND_API_KEY found! Emails will only log to console.")
 
 
 class EmailUtils:
-    """HTTP-based email sender. Uses Resend, then SendGrid, then console."""
+    """HTTP-based email sender. Brevo -> Resend -> console."""
+
+    @property
+    def brevo_api_key(self):
+        return os.getenv("BREVO_API_KEY", "").strip()
 
     @property
     def resend_api_key(self):
         return os.getenv("RESEND_API_KEY", "").strip()
-
-    @property
-    def sendgrid_api_key(self):
-        return os.getenv("SENDGRID_API_KEY", "").strip()
 
     @property
     def from_email(self):
@@ -46,24 +47,45 @@ class EmailUtils:
     def sender_name(self):
         return os.getenv("SENDER_NAME", "VikPay").strip()
 
-    @property
-    def dev_mode(self):
-        key = self.resend_api_key
-        if key:
-            logger.info(f"Email service: Resend API (key starts with {key[:6]}...)")
-            return False
-        if self.sendgrid_api_key:
-            logger.info("Email service: SendGrid API")
-            return False
-        logger.warning("Email service: console/dev mode — set RESEND_API_KEY to enable sending")
-        return True
+    # ------------------------------------------------------------------
+    # Internal senders
+    # ------------------------------------------------------------------
 
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
+    def _send_brevo(self, to_email: str, subject: str, html_body: str, text_body: str) -> bool:
+        """
+        Send via Brevo (Sendinblue) HTTP API.
+        300 emails/day free. Sends to ANY recipient.
+        Only requires verifying your sender email address (not a domain).
+        Docs: https://developers.brevo.com/reference/sendtransacemail
+        """
+        try:
+            resp = requests.post(
+                "https://api.brevo.com/v3/smtp/email",
+                headers={
+                    "api-key": self.brevo_api_key,
+                    "Content-Type": "application/json",
+                    "accept": "application/json",
+                },
+                json={
+                    "sender": {"name": self.sender_name, "email": self.from_email},
+                    "to": [{"email": to_email}],
+                    "subject": subject,
+                    "htmlContent": html_body,
+                    "textContent": text_body,
+                },
+                timeout=15,
+            )
+            if resp.status_code in (200, 201):
+                logger.info(f"Email sent via Brevo to {to_email}")
+                return True
+            logger.error(f"Brevo error {resp.status_code}: {resp.text}")
+            return False
+        except Exception as e:
+            logger.error(f"Brevo request failed: {e}")
+            return False
 
     def _send_resend(self, to_email: str, subject: str, html_body: str, text_body: str) -> bool:
-        """Send via Resend REST API (https://resend.com)."""
+        """Send via Resend REST API (needs domain verification to send to others)."""
         from_addr = f"{self.sender_name} <{self.from_email or 'onboarding@resend.dev'}>"
         try:
             resp = requests.post(
@@ -90,38 +112,8 @@ class EmailUtils:
             logger.error(f"Resend request failed: {e}")
             return False
 
-    def _send_sendgrid(self, to_email: str, subject: str, html_body: str, text_body: str) -> bool:
-        """Send via SendGrid REST API (https://sendgrid.com)."""
-        from_addr = self.from_email or "noreply@example.com"
-        try:
-            resp = requests.post(
-                "https://api.sendgrid.com/v3/mail/send",
-                headers={
-                    "Authorization": f"Bearer {self.sendgrid_api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "personalizations": [{"to": [{"email": to_email}]}],
-                    "from": {"email": from_addr, "name": self.sender_name},
-                    "subject": subject,
-                    "content": [
-                        {"type": "text/plain", "value": text_body},
-                        {"type": "text/html", "value": html_body},
-                    ],
-                },
-                timeout=15,
-            )
-            if resp.status_code == 202:
-                logger.info(f"Email sent via SendGrid to {to_email}")
-                return True
-            logger.error(f"SendGrid error {resp.status_code}: {resp.text}")
-            return False
-        except Exception as e:
-            logger.error(f"SendGrid request failed: {e}")
-            return False
-
     def _send_console(self, to_email: str, subject: str, body: str) -> bool:
-        """Print email to logs when no API key is configured."""
+        """Print email to logs (dev/test mode)."""
         sep = "=" * 60
         print(f"\n{sep}\nEMAIL TO: {to_email}\nSUBJECT: {subject}\n{sep}\n{body}\n{sep}")
         logger.info(f"Email (console/dev mode) logged for {to_email}")
@@ -132,15 +124,12 @@ class EmailUtils:
     # ------------------------------------------------------------------
 
     def send_email(self, to_email: str, subject: str, body: str, html_body: Optional[str] = None) -> bool:
-        """Send email. Tries Resend → SendGrid → console."""
+        """Send email. Tries Brevo -> Resend -> console."""
         html = html_body or f"<pre>{body}</pre>"
-
+        if self.brevo_api_key:
+            return self._send_brevo(to_email, subject, html, body)
         if self.resend_api_key:
             return self._send_resend(to_email, subject, html, body)
-
-        if self.sendgrid_api_key:
-            return self._send_sendgrid(to_email, subject, html, body)
-
         return self._send_console(to_email, subject, body)
 
     def send_otp_email(self, to_email: str, otp: str, purpose: str = "verification") -> bool:
@@ -164,7 +153,7 @@ class EmailUtils:
         return self.send_email(to_email, subject, body, html_body)
 
     def send_welcome_email(self, to_email: str, username: str) -> bool:
-        """Send welcome email after successful registration."""
+        """Send welcome email."""
         subject = "Welcome to VikPay!"
         body = f"Hello {username},\n\nYour account is active and verified.\n\nVikPay Team"
         html_body = f"""<html><body style="font-family:Arial,sans-serif;color:#333">
