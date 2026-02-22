@@ -102,6 +102,90 @@
             color: #666;
             margin-top: 5px;
         }
+        /* ---- Live Chat Styles ---- */
+        .chat-section {
+            margin-top: 20px;
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .chat-header {
+            background: #667eea;
+            color: white;
+            padding: 12px 16px;
+            font-weight: bold;
+            font-size: 15px;
+        }
+        #chatMessages {
+            height: 260px;
+            overflow-y: auto;
+            padding: 12px;
+            background: #f9fafb;
+        }
+        .chat-msg {
+            margin-bottom: 8px;
+            padding: 6px 10px;
+            border-radius: 6px;
+            background: #fff;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+            word-wrap: break-word;
+        }
+        .chat-msg .chat-user {
+            font-weight: bold;
+            color: #667eea;
+            margin-right: 6px;
+        }
+        .chat-msg .chat-time {
+            font-size: 11px;
+            color: #9ca3af;
+            float: right;
+        }
+        .chat-msg.self {
+            background: #eef2ff;
+        }
+        .chat-msg.broadcaster-msg {
+            background: #f0fdf4;
+            border-left: 3px solid #10b981;
+        }
+        .chat-msg.broadcaster-msg .chat-user {
+            color: #059669;
+        }
+        .chat-role-badge {
+            display: inline-block;
+            font-size: 10px;
+            padding: 1px 6px;
+            border-radius: 3px;
+            margin-right: 4px;
+            font-weight: bold;
+            vertical-align: middle;
+        }
+        .badge-broadcaster {
+            background: #d1fae5;
+            color: #065f46;
+        }
+        .badge-viewer {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+        .chat-input-row {
+            display: flex;
+            border-top: 1px solid #e5e7eb;
+        }
+        .chat-input-row input {
+            flex: 1;
+            border: none;
+            padding: 12px;
+            font-size: 14px;
+            outline: none;
+        }
+        .chat-input-row button {
+            margin: 0;
+            border-radius: 0;
+            padding: 12px 20px;
+            background: #667eea;
+            color: white;
+            font-size: 14px;
+        }
     </style>
 </head>
 <body>
@@ -160,6 +244,16 @@
                 </div>
             </div>
         </div>
+
+        <!-- Live Chat Section -->
+        <div class="chat-section" id="chatSection" style="display:none;">
+            <div class="chat-header">💬 Live Chat</div>
+            <div id="chatMessages"></div>
+            <div class="chat-input-row">
+                <input type="text" id="chatInput" placeholder="Type a message..." onkeydown="if(event.key==='Enter') sendChat()">
+                <button onclick="sendChat()">Send</button>
+            </div>
+        </div>
         
         <h3>📊 Console:</h3>
         <div id="log"></div>
@@ -176,6 +270,7 @@
         let peerConnections = {};
         let streamStartTime = null;
         let uptimeInterval = null;
+        let syncInterval = null;
         
         const rtcConfig = {
             iceServers: [
@@ -217,10 +312,11 @@
                 
                 if (response.ok && data.access_token) {
                     jwtToken = data.access_token;
+                    broadcasterUsername = (data.user && data.user.username) ? data.user.username : email.split('@')[0];
                     document.getElementById('jwtToken').value = jwtToken;
                     
                     log('✅ Login successful!', 'success');
-                    log(`👤 Logged in as: ${email}`);
+                    log(`👤 Logged in as: ${broadcasterUsername}`);
                     
                     // Show authenticated status
                     document.getElementById('authStatus').style.display = 'block';
@@ -282,11 +378,22 @@
                     log('✅ WebSocket connected! You are LIVE!', 'success');
                     document.getElementById('streamStatus').className = 'status live';
                     document.getElementById('streamStatus').textContent = '🔴 LIVE';
+                    document.getElementById('chatSection').style.display = 'block';
                     
                     // Start uptime counter
                     streamStartTime = Date.now();
                     updateUptime();
                     uptimeInterval = setInterval(updateUptime, 1000);
+
+                    // Start sending sync timestamps every 2 seconds
+                    syncInterval = setInterval(() => {
+                        if (websocket && websocket.readyState === WebSocket.OPEN) {
+                            websocket.send(JSON.stringify({
+                                type: 'sync_timestamp',
+                                broadcaster_ts: Date.now() / 1000
+                            }));
+                        }
+                    }, 2000);
                 };
                 
                 websocket.onmessage = async (event) => {
@@ -335,6 +442,30 @@
             }
             else if (data.type === 'viewer_count') {
                 document.getElementById('viewers').textContent = data.count;
+            }
+            else if (data.type === 'chat_message') {
+                appendChat(data.username, data.message, data.timestamp, false, data.role);
+            }
+            else if (data.type === 'keyframe_request') {
+                log(`🔑 Keyframe requested by viewer ${data.viewer_id}`);
+                // Force a keyframe by re-encoding — replace video track on the viewer's PC
+                const viewerPc = peerConnections[data.viewer_id];
+                if (viewerPc && localStream) {
+                    const videoSender = viewerPc.getSenders().find(s => s.track && s.track.kind === 'video');
+                    if (videoSender) {
+                        const params = videoSender.getParameters();
+                        if (!params.encodings || params.encodings.length === 0) {
+                            params.encodings = [{}];
+                        }
+                        // Toggle maxBitrate to force keyframe
+                        params.encodings[0].maxBitrate = params.encodings[0].maxBitrate ? undefined : 2000000;
+                        videoSender.setParameters(params).then(() => {
+                            log(`✅ Keyframe sent for viewer ${data.viewer_id}`, 'success');
+                        }).catch(err => {
+                            log(`⚠️ Keyframe fallback: ${err.message}`);
+                        });
+                    }
+                }
             }
         }
         
@@ -447,13 +578,56 @@
                 clearInterval(uptimeInterval);
                 uptimeInterval = null;
             }
+            if (syncInterval) {
+                clearInterval(syncInterval);
+                syncInterval = null;
+            }
             
             document.getElementById('localVideo').srcObject = null;
             document.getElementById('viewers').textContent = '0';
             document.getElementById('connections').textContent = '0';
             document.getElementById('uptime').textContent = '00:00';
+            document.getElementById('chatSection').style.display = 'none';
+            document.getElementById('chatMessages').innerHTML = '';
             
             log('⏹️ Streaming stopped', 'success');
+        }
+        
+        // ---- Live Chat Functions ----
+        let broadcasterUsername = 'Broadcaster';
+        
+        function sendChat() {
+            const input = document.getElementById('chatInput');
+            const msg = input.value.trim();
+            if (!msg || !websocket || websocket.readyState !== WebSocket.OPEN) return;
+            
+            websocket.send(JSON.stringify({
+                type: 'chat_message',
+                username: broadcasterUsername,
+                message: msg
+            }));
+            input.value = '';
+        }
+        
+        function appendChat(username, message, timestamp, isSelf, role) {
+            const container = document.getElementById('chatMessages');
+            const div = document.createElement('div');
+            let cls = 'chat-msg';
+            if (isSelf) cls += ' self';
+            if (role === 'broadcaster') cls += ' broadcaster-msg';
+            div.className = cls;
+            const time = timestamp ? new Date(timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
+            const badgeCls = role === 'broadcaster' ? 'badge-broadcaster' : 'badge-viewer';
+            const badgeLabel = role === 'broadcaster' ? 'HOST' : escapeHtml(username);
+            div.innerHTML = `<span class="chat-time">${time}</span><span class="chat-role-badge ${badgeCls}">${badgeLabel}</span><span class="chat-user">${role === 'broadcaster' ? escapeHtml(username) + ':' : ''}</span> ${escapeHtml(message)}`;
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+        }
+        
+        function escapeHtml(text) {
+            const d = document.createElement('div');
+            d.textContent = text;
+            return d.innerHTML;
         }
         
         // Initialize

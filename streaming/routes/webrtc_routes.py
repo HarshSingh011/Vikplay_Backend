@@ -120,6 +120,17 @@ async def webrtc_test_broadcast_websocket(
             elif message_type == "ice_candidate":
                 await webrtc_manager.handle_signal(websocket, data)
             
+            elif message_type == "chat_message":
+                username = data.get("username", "Broadcaster")
+                msg_text = data.get("message", "").strip()
+                if msg_text:
+                    await webrtc_manager.broadcast_chat_message(stream_id, user_id, username, msg_text, role="broadcaster")
+
+            elif message_type == "sync_timestamp":
+                # Broadcaster sends its current playback timestamp — relay to viewers
+                broadcaster_ts = data.get("broadcaster_ts", 0)
+                await webrtc_manager.relay_sync_timestamp(stream_id, broadcaster_ts)
+
             elif message_type == "ping":
                 await websocket.send_json({"type": "pong"})
             
@@ -165,6 +176,16 @@ async def webrtc_test_view_websocket(
             elif message_type == "ice_candidate":
                 await webrtc_manager.handle_signal(websocket, data)
             
+            elif message_type == "chat_message":
+                username = data.get("username", "Viewer")
+                msg_text = data.get("message", "").strip()
+                if msg_text:
+                    await webrtc_manager.broadcast_chat_message(stream_id, user_id, username, msg_text, role="viewer")
+
+            elif message_type == "request_go_live":
+                # Viewer wants to jump to live edge — request keyframe from broadcaster
+                await webrtc_manager.request_go_live(stream_id, user_id)
+
             elif message_type == "ping":
                 await websocket.send_json({"type": "pong"})
             
@@ -251,6 +272,18 @@ async def webrtc_broadcast_websocket(
                 # ICE candidate from broadcaster
                 await webrtc_manager.handle_signal(websocket, data)
             
+            elif message_type == "chat_message":
+                # Chat message from broadcaster
+                username = data.get("username", "Broadcaster")
+                msg_text = data.get("message", "").strip()
+                if msg_text:
+                    await webrtc_manager.broadcast_chat_message(stream_id, user_id, username, msg_text, role="broadcaster")
+
+            elif message_type == "sync_timestamp":
+                # Broadcaster sends its current playback timestamp — relay to viewers
+                broadcaster_ts = data.get("broadcaster_ts", 0)
+                await webrtc_manager.relay_sync_timestamp(stream_id, broadcaster_ts)
+
             elif message_type == "ping":
                 # Keep-alive ping
                 await websocket.send_json({"type": "pong"})
@@ -313,6 +346,15 @@ async def webrtc_view_websocket(
         stream = service.get_stream(stream_id)
         if stream:
             logger.info(f"Stream {stream_id} found in database")
+            # Block broadcaster from joining their own stream as viewer
+            if stream["stream"].user_id == user_id:
+                logger.warning(f"User {user_id} tried to view their own stream {stream_id}")
+                await websocket.send_json({
+                    "type": "error",
+                    "message": "You cannot join your own stream as a viewer"
+                })
+                await websocket.close(code=4006, reason="Cannot view own stream")
+                return
     except Exception as e:
         # Stream doesn't exist in DB - that's OK, WebRTC will still work if broadcaster is connected
         logger.info(f"Stream {stream_id} not in database, proceeding with WebRTC only: {e}")
@@ -340,6 +382,17 @@ async def webrtc_view_websocket(
                 # ICE candidate from viewer
                 await webrtc_manager.handle_signal(websocket, data)
             
+            elif message_type == "chat_message":
+                # Chat message from viewer
+                username = data.get("username", "Viewer")
+                msg_text = data.get("message", "").strip()
+                if msg_text:
+                    await webrtc_manager.broadcast_chat_message(stream_id, user_id, username, msg_text, role="viewer")
+
+            elif message_type == "request_go_live":
+                # Viewer wants to jump to live edge — request keyframe from broadcaster
+                await webrtc_manager.request_go_live(stream_id, user_id)
+
             elif message_type == "ping":
                 # Keep-alive ping
                 await websocket.send_json({"type": "pong"})
