@@ -315,8 +315,9 @@
     </div>
 
     <script>
-        const API_URL = 'http://localhost:8000';
-        const WS_URL = 'ws://localhost:8000';
+        // Production API URLs - change to localhost for local development
+        const API_URL = 'https://vikplay-backend.onrender.com';
+        const WS_URL = 'wss://vikplay-backend.onrender.com';
         
         let jwtToken = null;
         let isAnonymous = false;

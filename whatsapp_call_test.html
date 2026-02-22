@@ -267,7 +267,8 @@ async function connect() {
         currentUser = { id: String(payload.user_id || payload.sub), sub: payload.sub };
 
         if (ws) { ws.onclose = null; ws.close(); }
-        ws = new WebSocket(`ws://${location.hostname}:8000/calls/ws?token=${encodeURIComponent(token)}`);
+        // Production WebSocket URL - change to ws://localhost:8000 for local development
+        ws = new WebSocket(`wss://vikplay-backend.onrender.com/calls/ws?token=${encodeURIComponent(token)}`);
 
         ws.onopen = () => {
             setStatus('Connected as ' + payload.sub, true);
