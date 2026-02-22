@@ -7,25 +7,14 @@ from database import get_db
 from auth.schemas import EmailVerify, OTPVerify, PasswordReset, MessageResponse
 from auth.models import User, OTP
 from auth.utils.email import email_utils
-import bcrypt
-import secrets
+from auth.utils.otp import otp_utils
+from auth.utils.password import password_utils
 from datetime import datetime, timedelta
-import os
 import logging
 
 logger = logging.getLogger(__name__)
 
-# Create router
 router = APIRouter()
-
-def generate_otp() -> str:
-    """Generate 6-digit OTP"""
-    return ''.join([str(secrets.randbelow(10)) for _ in range(6)])
-
-def hash_password(password: str) -> str:
-    """Hash password using bcrypt"""
-    salt = bcrypt.gensalt()
-    return bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
 
 def send_reset_email_background(to_email: str, otp_code: str):
     """Send password reset OTP in background (non-blocking)"""
@@ -61,8 +50,8 @@ async def forgot_password(email_data: EmailVerify, background_tasks: BackgroundT
         db.commit()
         
         # Generate and store OTP
-        otp_code = generate_otp()
-        expires_at = datetime.utcnow() + timedelta(minutes=10)  # 10 minute expiry
+        otp_code = otp_utils.generate_otp(6)
+        expires_at = datetime.utcnow() + timedelta(minutes=10)
         
         otp_record = OTP(
             email=email_data.email,
@@ -145,7 +134,7 @@ async def reset_password(reset_data: PasswordReset, db: Session = Depends(get_db
             )
         
         # Update password
-        user.hashed_password = hash_password(reset_data.new_password)
+        user.hashed_password = password_utils.hash_password(reset_data.new_password)
         db.commit()
         
         logger.info(f"Password reset successfully for: {reset_data.email}")
