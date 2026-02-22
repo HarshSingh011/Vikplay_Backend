@@ -21,23 +21,31 @@ class EmailUtils:
 
     @property
     def resend_api_key(self):
-        return os.getenv("RESEND_API_KEY", "")
+        return os.getenv("RESEND_API_KEY", "").strip()
 
     @property
     def sendgrid_api_key(self):
-        return os.getenv("SENDGRID_API_KEY", "")
+        return os.getenv("SENDGRID_API_KEY", "").strip()
 
     @property
     def from_email(self):
-        return os.getenv("FROM_EMAIL", "")
+        return os.getenv("FROM_EMAIL", "").strip()
 
     @property
     def sender_name(self):
-        return os.getenv("SENDER_NAME", "VikPay")
+        return os.getenv("SENDER_NAME", "VikPay").strip()
 
     @property
     def dev_mode(self):
-        return not (self.resend_api_key or self.sendgrid_api_key)
+        key = self.resend_api_key
+        if key:
+            logger.info(f"Email service: Resend API (key starts with {key[:6]}...)")
+            return False
+        if self.sendgrid_api_key:
+            logger.info("Email service: SendGrid API")
+            return False
+        logger.warning("Email service: console/dev mode — set RESEND_API_KEY to enable sending")
+        return True
 
     # ------------------------------------------------------------------
     # Internal helpers
