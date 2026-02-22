@@ -1,13 +1,14 @@
 """
-Email utilities - SMTP relay on port 2525 (STARTTLS).
-Port 2525 is not blocked by Render/cloud providers unlike 25/465/587.
-Works with Brevo (smtp-relay.brevo.com), SendGrid (smtp.sendgrid.net),
-Mailgun (smtp.mailgun.org), or any relay that supports port 2525.
+Email utilities - HTTP API (no SMTP, works on Render free tier).
+
+Primary:  Resend   → set RESEND_API_KEY
+Fallback: SendGrid → set SENDGRID_API_KEY
+Console:  neither key set → prints to logs (dev/test mode)
+
+Resend free tier:  3,000 emails/month  https://resend.com
+SendGrid free tier: 100 emails/day     https://sendgrid.com
 """
-import ssl
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+import requests
 from typing import Optional
 import os
 import logging
@@ -16,27 +17,19 @@ logger = logging.getLogger(__name__)
 
 
 class EmailUtils:
-    """SMTP email sender via port 2525 relay (works on Render free tier)."""
+    """HTTP-based email sender. Uses Resend, then SendGrid, then console."""
 
     @property
-    def smtp_server(self):
-        return os.getenv("SMTP_SERVER", "smtp-relay.brevo.com")
+    def resend_api_key(self):
+        return os.getenv("RESEND_API_KEY", "")
 
     @property
-    def smtp_port(self):
-        return int(os.getenv("SMTP_PORT", "2525"))
-
-    @property
-    def sender_email(self):
-        return os.getenv("EMAIL_USERNAME", "")
-
-    @property
-    def sender_password(self):
-        return os.getenv("EMAIL_PASSWORD", "")
+    def sendgrid_api_key(self):
+        return os.getenv("SENDGRID_API_KEY", "")
 
     @property
     def from_email(self):
-        return os.getenv("FROM_EMAIL", self.sender_email)
+        return os.getenv("FROM_EMAIL", "")
 
     @property
     def sender_name(self):
@@ -44,44 +37,75 @@ class EmailUtils:
 
     @property
     def dev_mode(self):
-        return not (self.sender_email and self.sender_password)
+        return not (self.resend_api_key or self.sendgrid_api_key)
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _send_smtp(self, to_email: str, subject: str, body: str, html_body: str) -> bool:
-        """Send via SMTP relay on port 2525 using STARTTLS."""
-        host = self.smtp_server
-        port = self.smtp_port
-        logger.info(f"Sending email via {host}:{port} to {to_email}")
+    def _send_resend(self, to_email: str, subject: str, html_body: str, text_body: str) -> bool:
+        """Send via Resend REST API (https://resend.com)."""
+        from_addr = f"{self.sender_name} <{self.from_email or 'onboarding@resend.dev'}>"
         try:
-            msg = MIMEMultipart("alternative")
-            msg["From"] = f"{self.sender_name} <{self.from_email}>"
-            msg["To"] = to_email
-            msg["Subject"] = subject
-            msg.attach(MIMEText(body, "plain"))
-            msg.attach(MIMEText(html_body, "html"))
-
-            ctx = ssl.create_default_context()
-            with smtplib.SMTP(host, port, timeout=30) as server:
-                server.ehlo()
-                server.starttls(context=ctx)
-                server.ehlo()
-                server.login(self.sender_email, self.sender_password)
-                server.sendmail(self.sender_email, to_email, msg.as_string())
-
-            logger.info(f"Email sent successfully to {to_email}")
-            return True
+            resp = requests.post(
+                "https://api.resend.com/emails",
+                headers={
+                    "Authorization": f"Bearer {self.resend_api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "from": from_addr,
+                    "to": [to_email],
+                    "subject": subject,
+                    "html": html_body,
+                    "text": text_body,
+                },
+                timeout=15,
+            )
+            if resp.status_code in (200, 201):
+                logger.info(f"Email sent via Resend to {to_email}")
+                return True
+            logger.error(f"Resend error {resp.status_code}: {resp.text}")
+            return False
         except Exception as e:
-            logger.error(f"SMTP failed ({host}:{port}): {e}")
+            logger.error(f"Resend request failed: {e}")
+            return False
+
+    def _send_sendgrid(self, to_email: str, subject: str, html_body: str, text_body: str) -> bool:
+        """Send via SendGrid REST API (https://sendgrid.com)."""
+        from_addr = self.from_email or "noreply@example.com"
+        try:
+            resp = requests.post(
+                "https://api.sendgrid.com/v3/mail/send",
+                headers={
+                    "Authorization": f"Bearer {self.sendgrid_api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "personalizations": [{"to": [{"email": to_email}]}],
+                    "from": {"email": from_addr, "name": self.sender_name},
+                    "subject": subject,
+                    "content": [
+                        {"type": "text/plain", "value": text_body},
+                        {"type": "text/html", "value": html_body},
+                    ],
+                },
+                timeout=15,
+            )
+            if resp.status_code == 202:
+                logger.info(f"Email sent via SendGrid to {to_email}")
+                return True
+            logger.error(f"SendGrid error {resp.status_code}: {resp.text}")
+            return False
+        except Exception as e:
+            logger.error(f"SendGrid request failed: {e}")
             return False
 
     def _send_console(self, to_email: str, subject: str, body: str) -> bool:
-        """Print email to console (no credentials set / dev mode)."""
+        """Print email to logs when no API key is configured."""
         sep = "=" * 60
         print(f"\n{sep}\nEMAIL TO: {to_email}\nSUBJECT: {subject}\n{sep}\n{body}\n{sep}")
-        logger.info(f"Email (console mode) for {to_email}")
+        logger.info(f"Email (console/dev mode) logged for {to_email}")
         return True
 
     # ------------------------------------------------------------------
@@ -89,11 +113,16 @@ class EmailUtils:
     # ------------------------------------------------------------------
 
     def send_email(self, to_email: str, subject: str, body: str, html_body: Optional[str] = None) -> bool:
-        """Send email via SMTP relay, or log to console if no credentials."""
+        """Send email. Tries Resend → SendGrid → console."""
         html = html_body or f"<pre>{body}</pre>"
-        if self.dev_mode:
-            return self._send_console(to_email, subject, body)
-        return self._send_smtp(to_email, subject, body, html)
+
+        if self.resend_api_key:
+            return self._send_resend(to_email, subject, html, body)
+
+        if self.sendgrid_api_key:
+            return self._send_sendgrid(to_email, subject, html, body)
+
+        return self._send_console(to_email, subject, body)
 
     def send_otp_email(self, to_email: str, otp: str, purpose: str = "verification") -> bool:
         """Send OTP email."""

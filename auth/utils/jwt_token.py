@@ -14,15 +14,25 @@ class JWTUtils:
     """Utility class for JWT token operations"""
     
     def __init__(self):
-        self.secret_key = os.getenv("SECRET_KEY", "your-secret-key-change-this-in-production")
         self.algorithm = "HS256"
-        self.access_token_expire_minutes = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
-        self.refresh_token_expire_days = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
-    
+
+    @property
+    def secret_key(self):
+        return os.getenv("SECRET_KEY", "your-secret-key-change-this-in-production")
+
+    @property
+    def access_token_expire_minutes(self):
+        # Default: 43200 minutes = 30 days (1 month)
+        return int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "43200"))
+
+    @property
+    def refresh_token_expire_days(self):
+        return int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
+
     def create_access_token(self, data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
         """Create a JWT access token"""
         to_encode = data.copy()
-        
+
         if expires_delta:
             expire = datetime.utcnow() + expires_delta
         else:
