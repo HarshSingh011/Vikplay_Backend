@@ -312,10 +312,11 @@
                 
                 if (response.ok && data.access_token) {
                     jwtToken = data.access_token;
+                    broadcasterUsername = (data.user && data.user.username) ? data.user.username : email.split('@')[0];
                     document.getElementById('jwtToken').value = jwtToken;
                     
                     log('✅ Login successful!', 'success');
-                    log(`👤 Logged in as: ${email}`);
+                    log(`👤 Logged in as: ${broadcasterUsername}`);
                     
                     // Show authenticated status
                     document.getElementById('authStatus').style.display = 'block';
@@ -600,12 +601,6 @@
             const msg = input.value.trim();
             if (!msg || !websocket || websocket.readyState !== WebSocket.OPEN) return;
             
-            // Determine username from login email or default
-            const emailEl = document.getElementById('email');
-            if (emailEl && emailEl.value) {
-                broadcasterUsername = emailEl.value.split('@')[0];
-            }
-            
             websocket.send(JSON.stringify({
                 type: 'chat_message',
                 username: broadcasterUsername,
@@ -623,8 +618,8 @@
             div.className = cls;
             const time = timestamp ? new Date(timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
             const badgeCls = role === 'broadcaster' ? 'badge-broadcaster' : 'badge-viewer';
-            const badgeLabel = role === 'broadcaster' ? 'HOST' : 'VIEWER';
-            div.innerHTML = `<span class="chat-time">${time}</span><span class="chat-role-badge ${badgeCls}">${badgeLabel}</span><span class="chat-user">${escapeHtml(username)}:</span> ${escapeHtml(message)}`;
+            const badgeLabel = role === 'broadcaster' ? 'HOST' : escapeHtml(username);
+            div.innerHTML = `<span class="chat-time">${time}</span><span class="chat-role-badge ${badgeCls}">${badgeLabel}</span><span class="chat-user">${role === 'broadcaster' ? escapeHtml(username) + ':' : ''}</span> ${escapeHtml(message)}`;
             container.appendChild(div);
             container.scrollTop = container.scrollHeight;
         }
