@@ -421,7 +421,12 @@
         });
         
         async function joinStream() {
-            const streamId = document.getElementById('streamId').value;
+            const streamId = document.getElementById('streamId').value.trim();
+            if (!streamId || streamId.length !== 6) {
+                log('❌ Stream code must be exactly 6 digits!', 'error');
+                return;
+            }
+            log(`📺 Joining stream: ${streamId}`, 'success');
             
             try {
                 // Build WebSocket URL
