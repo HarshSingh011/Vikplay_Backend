@@ -93,31 +93,6 @@ except Exception as e:
     logging.error(f"Failed to load call router: {e}")
 
 # Serve HTML files for WebRTC testing
-@app.get("/test_broadcaster.html")
-async def serve_broadcaster():
-    """Serve the test broadcaster HTML page"""
-    return FileResponse("test_broadcaster.html")
-
-@app.get("/test_viewer.html")
-async def serve_viewer():
-    """Serve the test viewer HTML page"""
-    return FileResponse("test_viewer.html")
-
-@app.get("/index.html")
-async def serve_index():
-    """Serve the index HTML page"""
-    return FileResponse("index.html")
-
-@app.get("/broadcaster.html")
-async def serve_broadcaster_full():
-    """Serve the full broadcaster HTML page"""
-    return FileResponse("broadcaster.html")
-
-@app.get("/viewer.html")
-async def serve_viewer_full():
-    """Serve the full viewer HTML page"""
-    return FileResponse("viewer.html")
-
 @app.get("/broadcaster_jwt.html")
 async def serve_broadcaster_jwt():
     """Serve the JWT broadcaster HTML page"""
@@ -127,13 +102,6 @@ async def serve_broadcaster_jwt():
 async def serve_viewer_jwt():
     """Serve the JWT viewer HTML page"""
     return FileResponse("viewer_jwt.html")
-
-# Simple test page for video calls
-@app.get("/simple-video-call")
-async def serve_simple_video_call():
-    """Serve simple video call test page"""
-    logger.info("Serving simple video call test page")
-    return FileResponse("simple_video_call.html")
 
 @app.get("/whatsapp_call_test.html")
 async def serve_whatsapp_call_test():
