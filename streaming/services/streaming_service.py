@@ -12,18 +12,36 @@ class StreamingService:
 
     # ── Internal helpers (used by webrtc_routes) ─────────
 
+    def _serialize_stream(self, stream) -> dict:
+        """Convert a SQLAlchemy Stream object to a plain dict."""
+        return {
+            "id": stream.id,
+            "stream_code": stream.stream_code,
+            "title": stream.title,
+            "description": stream.description,
+            "user_id": stream.user_id,
+            "stream_key": stream.stream_key,
+            "is_live": stream.is_live,
+            "viewer_count": stream.viewer_count or 0,
+            "max_viewer_count": stream.max_viewer_count or 0,
+            "thumbnail_url": stream.thumbnail_url,
+            "created_at": stream.created_at.isoformat() if stream.created_at else None,
+            "started_at": stream.started_at.isoformat() if stream.started_at else None,
+            "ended_at": stream.ended_at.isoformat() if stream.ended_at else None,
+        }
+
     def get_stream(self, stream_id: int) -> Optional[dict]:
         stream = self.repository.get_stream_by_id(stream_id)
         if not stream:
             return None
-        return {"stream": stream}
+        return {"stream": self._serialize_stream(stream)}
 
     def get_stream_by_code(self, stream_code: str) -> Optional[dict]:
         """Look up a stream by its 6-digit public code"""
         stream = self.repository.get_stream_by_code(stream_code)
         if not stream:
             return None
-        return {"stream": stream}
+        return {"stream": self._serialize_stream(stream)}
 
     def start_stream(self, stream_id: int, user_id: int) -> dict:
         """Mark a stream as live (called by webrtc broadcast handler)."""
@@ -33,7 +51,7 @@ class StreamingService:
         if stream.user_id != user_id:
             raise HTTPException(status_code=403, detail="Not authorized")
         if stream.is_live:
-            return {"stream": stream, "message": "Stream is already live"}
+            return {"stream": self._serialize_stream(stream), "message": "Stream is already live"}
         active = self.repository.get_user_active_stream(user_id)
         if active and active.id != stream_id:
             raise HTTPException(
@@ -41,7 +59,7 @@ class StreamingService:
                 detail="You already have a live stream.",
             )
         updated = self.repository.start_stream(stream)
-        return {"stream": updated, "message": "Stream started"}
+        return {"stream": self._serialize_stream(updated), "message": "Stream started"}
 
     def end_stream(self, stream_id: int, user_id: int) -> dict:
         """Mark a stream as offline (called by webrtc broadcast handler)."""
@@ -51,9 +69,9 @@ class StreamingService:
         if stream.user_id != user_id:
             raise HTTPException(status_code=403, detail="Not authorized")
         if not stream.is_live:
-            return {"stream": stream, "message": "Stream is already offline"}
+            return {"stream": self._serialize_stream(stream), "message": "Stream is already offline"}
         updated = self.repository.end_stream(stream)
-        return {"stream": updated, "message": "Stream ended"}
+        return {"stream": self._serialize_stream(updated), "message": "Stream ended"}
 
     # ── Public REST endpoints ────────────────────────────
 
@@ -152,4 +170,13 @@ class StreamingService:
         if not stream:
             raise HTTPException(status_code=404, detail="Stream not found")
         messages = self.repository.get_stream_chat_messages(stream.id, limit)
-        return [{"chat_message": msg} for msg in messages]
+        return [
+            {
+                "id": msg.id,
+                "user_id": msg.user_id,
+                "username": msg.username,
+                "message": msg.message,
+                "created_at": msg.created_at.isoformat() if msg.created_at else None,
+            }
+            for msg in messages
+        ]
