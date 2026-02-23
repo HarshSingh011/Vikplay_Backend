@@ -2,7 +2,6 @@ import logging
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from database import engine
 import os
@@ -140,11 +139,6 @@ async def serve_simple_video_call():
 async def serve_whatsapp_call_test():
     """Serve the WhatsApp call test HTML page"""
     return FileResponse("whatsapp_call_test.html")
-
-@app.get("/whatsapp_call_test_backup.html")
-async def serve_whatsapp_call_test_backup():
-    """Serve the WhatsApp call test backup HTML page"""
-    return FileResponse("whatsapp_call_test_backup.html")
 
 if __name__ == "__main__":
     import uvicorn
