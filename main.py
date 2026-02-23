@@ -41,6 +41,11 @@ _STREAM_MIGRATIONS = [
     "ALTER TABLE streams ADD COLUMN IF NOT EXISTS ended_at TIMESTAMPTZ",
     # Thumbnail support
     "ALTER TABLE streams ADD COLUMN IF NOT EXISTS thumbnail_url VARCHAR",
+    # Drop the old UNIQUE index on user_id — a user can have many stream records
+    # (one-active-at-a-time is enforced in the service layer, not the DB)
+    "DROP INDEX IF EXISTS ix_streams_user_id",
+    # Re-create as a plain (non-unique) index for query performance
+    "CREATE INDEX IF NOT EXISTS ix_streams_user_id ON streams (user_id)",
 ]
 
 try:
