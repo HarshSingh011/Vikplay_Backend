@@ -24,6 +24,38 @@ video_models.Base.metadata.create_all(bind=engine)
 streaming_models.Base.metadata.create_all(bind=engine)
 call_models.Base.metadata.create_all(bind=engine)  # Enabled for calls
 
+# ── Incremental column migrations ─────────────────────────────────────────────
+# create_all() never adds columns to existing tables, so we ALTER TABLE
+# manually for each new column. IF NOT EXISTS makes it safe to re-run.
+from sqlalchemy import text
+
+_STREAM_MIGRATIONS = [
+    # 6-digit public stream code (added after initial deploy)
+    "ALTER TABLE streams ADD COLUMN IF NOT EXISTS stream_code VARCHAR(6)",
+    # Unique index for stream_code (ignore error if already exists)
+    "CREATE UNIQUE INDEX IF NOT EXISTS ix_streams_stream_code ON streams (stream_code)",
+    # Peak concurrent viewers (added in streaming API overhaul)
+    "ALTER TABLE streams ADD COLUMN IF NOT EXISTS max_viewer_count INTEGER DEFAULT 0",
+    # Stream lifecycle timestamps
+    "ALTER TABLE streams ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ",
+    "ALTER TABLE streams ADD COLUMN IF NOT EXISTS ended_at TIMESTAMPTZ",
+    # Thumbnail support
+    "ALTER TABLE streams ADD COLUMN IF NOT EXISTS thumbnail_url VARCHAR",
+]
+
+try:
+    with engine.connect() as _conn:
+        for _stmt in _STREAM_MIGRATIONS:
+            try:
+                _conn.execute(text(_stmt))
+            except Exception as _col_err:
+                logger.warning(f"Migration skipped (likely already applied): {_col_err}")
+        _conn.commit()
+    logger.info("Stream table migrations applied successfully")
+except Exception as _e:
+    logger.error(f"Stream migration error: {_e}")
+# ──────────────────────────────────────────────────────────────────────────────
+
 app = FastAPI(title="Video Server API", version="1.0.1")
 
 app.add_middleware(
