@@ -76,6 +76,17 @@ async def get_stream(
         raise HTTPException(status_code=404, detail="Stream not found")
     return result
 
+@router.get("/streams/code/{stream_code}", response_model=dict)
+async def get_stream_by_code(
+    stream_code: str,
+    service: StreamingService = Depends(get_streaming_service)
+):
+    """Get a specific stream by its 6-digit stream code"""
+    result = service.get_stream_by_code(stream_code)
+    if not result:
+        raise HTTPException(status_code=404, detail="Stream not found")
+    return result
+
 @router.post("/streams/{stream_id}/chat", response_model=dict)
 async def send_chat_message(
     stream_id: int,

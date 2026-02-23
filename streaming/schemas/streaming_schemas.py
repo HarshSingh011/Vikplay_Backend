@@ -11,6 +11,7 @@ class StreamCreate(StreamBase):
 
 class Stream(StreamBase):
     id: int
+    stream_code: str
     user_id: int
     stream_key: str
     is_live: bool

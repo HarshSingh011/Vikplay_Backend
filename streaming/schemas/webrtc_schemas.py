@@ -28,7 +28,7 @@ class WebRTCIceCandidate(BaseModel):
 
 class StreamSessionInfo(BaseModel):
     """Information about active stream session"""
-    stream_id: int
+    stream_code: str
     user_id: int
     role: str
     viewer_count: Optional[int] = 0
