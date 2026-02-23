@@ -272,6 +272,14 @@
         let streamStartTime = null;
         let uptimeInterval = null;
         let syncInterval = null;
+
+        // Auto-generate a random 6-digit stream code on page load
+        function generateStreamCode() {
+            return String(Math.floor(100000 + Math.random() * 900000));
+        }
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('streamId').value = generateStreamCode();
+        });
         
         const rtcConfig = {
             iceServers: [
@@ -356,9 +364,14 @@
                 return;
             }
             
-            const streamId = document.getElementById('streamId').value;
+            const streamId = document.getElementById('streamId').value.trim();
+            if (!streamId || streamId.length !== 6) {
+                log('❌ Stream code must be exactly 6 digits!', 'error');
+                return;
+            }
             
             try {
+                log(`📺 Stream Code: ${streamId}  — share this code with viewers!`, 'success');
                 log('🎥 Getting camera access...');
                 localStream = await navigator.mediaDevices.getUserMedia({
                     video: { width: 1280, height: 720 },
@@ -377,8 +390,9 @@
                 
                 websocket.onopen = () => {
                     log('✅ WebSocket connected! You are LIVE!', 'success');
+                    log(`🔴 LIVE — Stream Code: ${streamId}`, 'success');
                     document.getElementById('streamStatus').className = 'status live';
-                    document.getElementById('streamStatus').textContent = '🔴 LIVE';
+                    document.getElementById('streamStatus').textContent = `🔴 LIVE — Code: ${streamId}`;
                     document.getElementById('chatSection').style.display = 'block';
                     
                     // Start uptime counter
