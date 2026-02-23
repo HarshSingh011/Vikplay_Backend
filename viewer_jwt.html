@@ -188,6 +188,38 @@
             color: white;
             font-size: 14px;
         }
+        /* ---- Stream Discovery ---- */
+        .discovery-section {
+            background: #fff7ff;
+            border: 1px solid #e9d5ff;
+            border-radius: 10px;
+            padding: 16px;
+            margin-bottom: 20px;
+        }
+        .discovery-section h4 { margin: 0 0 12px; color: #7c3aed; font-size:14px; text-transform:uppercase; letter-spacing:1px; }
+        .search-row { display:flex; gap:8px; margin-bottom:12px; }
+        .search-row input { flex:1; padding:9px 12px; border:1px solid #ddd; border-radius:6px; font-size:14px; }
+        .search-row button { white-space:nowrap; background:#7c3aed; color:white; border:none; padding:9px 16px; border-radius:6px; cursor:pointer; font-size:13px; }
+        .stream-card {
+            display:flex; align-items:center; justify-content:space-between;
+            background:white; border:1px solid #e5e7eb; border-radius:8px;
+            padding:12px; margin-bottom:8px; cursor:pointer;
+            transition: box-shadow 0.2s;
+        }
+        .stream-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.12); }
+        .stream-card .sc-info h5 { margin:0 0 4px; font-size:14px; color:#111; }
+        .stream-card .sc-info p  { margin:0; font-size:12px; color:#6b7280; }
+        .stream-card .sc-code { font-size:20px; font-weight:bold; color:#7c3aed; letter-spacing:3px; }
+        .live-dot { display:inline-block; width:8px; height:8px; background:#ef4444;
+                    border-radius:50%; margin-right:6px; animation:blink 1s infinite; }
+        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+        /* ---- Stream info card ---- */
+        .stream-info-card {
+            display:none; background:#faf5ff; border:1px solid #ddd6fe;
+            border-radius:8px; padding:14px; margin-bottom:12px;
+        }
+        .stream-info-card h4 { margin:0 0 6px; font-size:15px; }
+        .stream-info-card p  { margin:0; font-size:13px; color:#555; }
         /* ---- Delay / Go-to-Live ---- */
         .delay-bar {
             display: none;
@@ -268,9 +300,28 @@
         
         <!-- Viewing Section -->
         <div id="viewingSection" style="display:none;">
+
+            <!-- Discovery -->
+            <div class="discovery-section">
+                <h4>🔍 Find a Stream</h4>
+                <div class="search-row">
+                    <input type="text" id="searchQuery" placeholder="Search streams by title..." onkeydown="if(event.key==='Enter') searchStreams()">
+                    <button onclick="searchStreams()">🔍 Search</button>
+                    <button onclick="loadLiveStreams()" style="background:#10b981;">🟢 Live Now</button>
+                </div>
+                <div id="streamList"></div>
+            </div>
+
             <div class="form-group">
                 <label>Stream Code (6 digits):</label>
                 <input type="text" id="streamId" value="" placeholder="e.g. 482917" maxlength="6" pattern="[0-9]{6}">
+            </div>
+
+            <!-- Stream info populated after API validation -->
+            <div class="stream-info-card" id="streamInfoCard">
+                <h4 id="siTitle"></h4>
+                <p id="siDesc"></p>
+                <p id="siMeta" style="margin-top:6px; font-size:12px; color:#7c3aed; font-weight:bold;"></p>
             </div>
             
             <div id="viewStatus" class="status offline">⚫ Not Watching</div>
@@ -325,9 +376,87 @@
         let peerConnection = null;
         let watchStartTime = null;
         let watchtimeInterval = null;
-        let viewerId = null;  // Store our viewer ID from server
+        let viewerId = null;
         let lastBroadcasterTs = 0;
-        let currentDelay = 0;  // delay in seconds behind live
+        let currentDelay = 0;
+
+        // ── Discovery: Live streams & search ────────────────────────
+
+        async function loadLiveStreams() {
+            log('🟢 Fetching live streams...');
+            try {
+                const res = await fetch(`${API_URL}/api/streaming/streams/live`);
+                const streams = await res.json();
+                renderStreamList(streams, true);
+                if (streams.length === 0) log('ℹ️ No live streams right now.');
+                else log(`✅ ${streams.length} live stream(s) found.`, 'success');
+            } catch (e) {
+                log(`❌ Could not load live streams: ${e.message}`, 'error');
+            }
+        }
+
+        async function searchStreams() {
+            const q = document.getElementById('searchQuery').value.trim();
+            if (!q) { await loadLiveStreams(); return; }
+            log(`🔍 Searching: "${q}"...`);
+            try {
+                const res = await fetch(`${API_URL}/api/streaming/streams/search?q=${encodeURIComponent(q)}`);
+                const streams = await res.json();
+                renderStreamList(streams, false);
+                if (streams.length === 0) log('ℹ️ No results.');
+                else log(`✅ ${streams.length} result(s) found.`, 'success');
+            } catch (e) {
+                log(`❌ Search failed: ${e.message}`, 'error');
+            }
+        }
+
+        function renderStreamList(streams, liveOnly) {
+            const container = document.getElementById('streamList');
+            if (!streams.length) {
+                container.innerHTML = `<p style="color:#9ca3af; font-size:13px; margin:0;">No streams found.</p>`;
+                return;
+            }
+            container.innerHTML = streams.map(s => `
+                <div class="stream-card" onclick="selectStream('${s.stream_code}')">
+                    <div class="sc-info">
+                        <h5>${s.is_live ? '<span class="live-dot"></span>' : ''}${escapeHtml(s.title)}</h5>
+                        <p>${s.description ? escapeHtml(s.description) : ''}${
+                            s.is_live ? ` &mdash; <span style="color:#10b981">${s.viewer_count || 0} watching</span>` : ''
+                        }</p>
+                    </div>
+                    <div class="sc-code">${s.stream_code}</div>
+                </div>
+            `).join('');
+        }
+
+        function selectStream(code) {
+            document.getElementById('streamId').value = code;
+            log(`📍 Selected stream: ${code}`, 'success');
+            previewStreamInfo(code);
+        }
+
+        async function previewStreamInfo(code) {
+            try {
+                const res = await fetch(`${API_URL}/api/streaming/streams/code/${code}`);
+                if (!res.ok) return;
+                const data = await res.json();
+                const s = data.stream;
+                const card = document.getElementById('streamInfoCard');
+                document.getElementById('siTitle').textContent = s.title;
+                document.getElementById('siDesc').textContent = s.description || '';
+                document.getElementById('siMeta').textContent =
+                    `${s.is_live ? '🟢 LIVE — ' : '⚫ Offline — '}${s.viewer_count || 0} viewers`;
+                card.style.display = 'block';
+            } catch (_) {}
+        }
+
+        // Watch stream code input for 6-digit entry
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('streamId').addEventListener('input', (e) => {
+                if (e.target.value.length === 6) previewStreamInfo(e.target.value);
+                else document.getElementById('streamInfoCard').style.display = 'none';
+            });
+        });
         
         const rtcConfig = {
             iceServers: [
@@ -421,61 +550,90 @@
         });
         
         async function joinStream() {
-            const streamId = document.getElementById('streamId').value.trim();
-            if (!streamId || streamId.length !== 6) {
+            const streamCode = document.getElementById('streamId').value.trim();
+            if (!streamCode || streamCode.length !== 6) {
                 log('❌ Stream code must be exactly 6 digits!', 'error');
                 return;
             }
-            log(`📺 Joining stream: ${streamId}`, 'success');
-            
+
+            // ── Step 1: Validate stream via REST API ───────────────────
             try {
-                // Build WebSocket URL
-                let wsUrl = `${WS_URL}/api/webrtc/ws/view/${streamId}`;
+                log(`🔍 Checking stream ${streamCode}...`);
+                const res = await fetch(`${API_URL}/api/streaming/streams/code/${streamCode}`);
+                if (!res.ok) {
+                    log('❌ Stream not found. Check the code and try again.', 'error');
+                    return;
+                }
+                const data = await res.json();
+                const s = data.stream;
+                if (!s.is_live) {
+                    log('⚠️ This stream is not live. The broadcaster may not have started yet.', 'error');
+                    return;
+                }
+                log(`✅ Stream found: "${s.title}" (${s.viewer_count || 0} watching)`, 'success');
+            } catch (e) {
+                log(`❌ Could not verify stream: ${e.message}`, 'error');
+                return;
+            }
+
+            log(`📺 Joining stream: ${streamCode}`, 'success');
+
+            // ── Step 2: Load chat history from API ────────────────────
+            try {
+                const chatRes = await fetch(`${API_URL}/api/streaming/streams/code/${streamCode}/chat?limit=50`);
+                if (chatRes.ok) {
+                    const msgs = await chatRes.json();
+                    if (msgs.length > 0) {
+                        log(`💬 Loading ${msgs.length} previous chat message(s)...`);
+                        msgs.reverse().forEach(m => {
+                            const cm = m.chat_message;
+                            appendChat(cm.username, cm.message, cm.created_at, false, 'viewer');
+                        });
+                    }
+                }
+            } catch (_) {}
+
+            // ── Step 3: Connect WebSocket ────────────────────────────
+            try {
+                let wsUrl = `${WS_URL}/api/webrtc/ws/view/${streamCode}`;
                 if (jwtToken) {
                     wsUrl += `?token=${jwtToken}`;
                     log('🔌 Connecting as authenticated viewer...');
                 } else {
                     log('🔌 Connecting as anonymous viewer...');
                 }
-                
+
                 websocket = new WebSocket(wsUrl);
-                
+
                 websocket.onopen = async () => {
                     log('✅ WebSocket connected!', 'success');
                     document.getElementById('viewStatus').className = 'status watching';
                     document.getElementById('viewStatus').textContent = '📺 Watching Stream';
                     document.getElementById('connection').textContent = 'Connected';
                     document.getElementById('chatSection').style.display = 'block';
-                    
-                    // Start watch time counter
+
                     watchStartTime = Date.now();
                     updateWatchtime();
                     watchtimeInterval = setInterval(updateWatchtime, 1000);
-                    
-                    // Don't create peer connection here - wait for 'connected' message from server
                 };
-                
+
                 websocket.onmessage = async (event) => {
                     const data = JSON.parse(event.data);
                     await handleSignal(data);
                 };
-                
+
                 websocket.onerror = (error) => {
                     log(`❌ WebSocket error: ${error}`, 'error');
                 };
-                
+
                 websocket.onclose = (event) => {
                     log(`🔌 WebSocket closed (Code: ${event.code}, Reason: ${event.reason || 'None'})`);
                     document.getElementById('viewStatus').className = 'status offline';
                     document.getElementById('viewStatus').textContent = '⚫ Not Watching';
                     document.getElementById('connection').textContent = 'Disconnected';
-                    
-                    if (watchtimeInterval) {
-                        clearInterval(watchtimeInterval);
-                        watchtimeInterval = null;
-                    }
+                    if (watchtimeInterval) { clearInterval(watchtimeInterval); watchtimeInterval = null; }
                 };
-                
+
             } catch (error) {
                 log(`❌ Error: ${error.message}`, 'error');
             }
