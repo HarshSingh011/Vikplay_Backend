@@ -7,6 +7,7 @@ class Stream(Base):
     __tablename__ = "streams"
 
     id = Column(Integer, primary_key=True, index=True)
+    stream_code = Column(String(6), unique=True, index=True, nullable=False)  # 6-digit public ID
     title = Column(String, index=True)
     description = Column(Text, nullable=True)
     user_id = Column(Integer, ForeignKey("users.id"), unique=True, index=True)  # One stream per user

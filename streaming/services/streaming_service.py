@@ -36,6 +36,13 @@ class StreamingService:
             return None
         return {"stream": stream}
 
+    def get_stream_by_code(self, stream_code: str) -> Optional[dict]:
+        """Look up a stream by its 6-digit public code"""
+        stream = self.repository.get_stream_by_code(stream_code)
+        if not stream:
+            return None
+        return {"stream": stream}
+
     def get_user_streams(self, user_id: int) -> List[dict]:
         streams = self.repository.get_user_streams(user_id)
         return [{"stream": stream} for stream in streams]

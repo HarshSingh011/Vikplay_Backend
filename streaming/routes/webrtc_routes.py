@@ -44,21 +44,21 @@ async def get_current_user(
 def get_streaming_service(db: Session = Depends(get_db)) -> StreamingService:
     return StreamingService(db)
 
-@router.get("/session/{stream_id}", response_model=dict)
+@router.get("/session/{stream_code}", response_model=dict)
 async def get_stream_session(
-    stream_id: int,
+    stream_code: str,
     service: StreamingService = Depends(get_streaming_service)
 ):
     """Get WebRTC session info for a stream"""
-    stream = service.get_stream(stream_id)
+    stream = service.get_stream_by_code(stream_code)
     if not stream:
         raise HTTPException(status_code=404, detail="Stream not found")
     
-    viewer_count = webrtc_manager.get_viewer_count(stream_id)
-    is_live = stream_id in webrtc_manager.broadcasters
+    viewer_count = webrtc_manager.get_viewer_count(stream_code)
+    is_live = stream_code in webrtc_manager.broadcasters
     
     return {
-        "stream_id": stream_id,
+        "stream_code": stream_code,
         "is_live": is_live,
         "viewer_count": viewer_count,
         "stream_info": stream
@@ -79,29 +79,29 @@ async def check_user_stream_status(
 ):
     """Check if user has an active stream"""
     user_id = current_user["user_id"]
-    active_stream_id = webrtc_manager.is_user_streaming(user_id)
+    active_stream_code = webrtc_manager.is_user_streaming(user_id)
     
     return {
-        "has_active_stream": active_stream_id is not None,
-        "stream_id": active_stream_id,
+        "has_active_stream": active_stream_code is not None,
+        "stream_code": active_stream_code,
         "user_id": user_id
     }
 
 # TEST MODE WebSocket endpoints (no authentication required for testing)
-@router.websocket("/ws/test/broadcast/{stream_id}")
+@router.websocket("/ws/test/broadcast/{stream_code}")
 async def webrtc_test_broadcast_websocket(
     websocket: WebSocket,
-    stream_id: int
+    stream_code: str
 ):
     """TEST MODE: WebSocket endpoint for broadcaster (no auth required)"""
     
-    # Use stream_id as user_id for testing
-    user_id = stream_id * 1000
+    # Use hash of stream_code as user_id for testing
+    user_id = hash(stream_code) % 1000000
     
-    logger.info(f"TEST MODE: Broadcaster connecting - stream_id={stream_id}, user_id={user_id}")
+    logger.info(f"TEST MODE: Broadcaster connecting - stream_code={stream_code}, user_id={user_id}")
     
     # Connect broadcaster
-    result = await webrtc_manager.connect_broadcaster(websocket, stream_id, user_id)
+    result = await webrtc_manager.connect_broadcaster(websocket, stream_code, user_id)
     
     if not result["success"]:
         return
@@ -124,12 +124,11 @@ async def webrtc_test_broadcast_websocket(
                 username = data.get("username", "Broadcaster")
                 msg_text = data.get("message", "").strip()
                 if msg_text:
-                    await webrtc_manager.broadcast_chat_message(stream_id, user_id, username, msg_text, role="broadcaster")
+                    await webrtc_manager.broadcast_chat_message(stream_code, user_id, username, msg_text, role="broadcaster")
 
             elif message_type == "sync_timestamp":
-                # Broadcaster sends its current playback timestamp — relay to viewers
                 broadcaster_ts = data.get("broadcaster_ts", 0)
-                await webrtc_manager.relay_sync_timestamp(stream_id, broadcaster_ts)
+                await webrtc_manager.relay_sync_timestamp(stream_code, broadcaster_ts)
 
             elif message_type == "ping":
                 await websocket.send_json({"type": "pong"})
@@ -138,26 +137,26 @@ async def webrtc_test_broadcast_websocket(
                 logger.warning(f"Unknown message type from broadcaster: {message_type}")
     
     except WebSocketDisconnect:
-        logger.info(f"TEST MODE: Broadcaster WebSocket disconnected: stream_id={stream_id}")
+        logger.info(f"TEST MODE: Broadcaster WebSocket disconnected: stream_code={stream_code}")
     except Exception as e:
         logger.error(f"TEST MODE: Broadcaster WebSocket error: {e}")
     finally:
         webrtc_manager.disconnect(websocket)
 
-@router.websocket("/ws/test/view/{stream_id}")
+@router.websocket("/ws/test/view/{stream_code}")
 async def webrtc_test_view_websocket(
     websocket: WebSocket,
-    stream_id: int
+    stream_code: str
 ):
     """TEST MODE: WebSocket endpoint for viewer (no auth required)"""
     
     # Generate random user_id for testing
     user_id = hash(websocket) % 1000000
     
-    logger.info(f"TEST MODE: Viewer connecting - stream_id={stream_id}, user_id={user_id}")
+    logger.info(f"TEST MODE: Viewer connecting - stream_code={stream_code}, user_id={user_id}")
     
     # Connect viewer
-    result = await webrtc_manager.connect_viewer(websocket, stream_id, user_id)
+    result = await webrtc_manager.connect_viewer(websocket, stream_code, user_id)
     
     if not result["success"]:
         return
@@ -180,11 +179,10 @@ async def webrtc_test_view_websocket(
                 username = data.get("username", "Viewer")
                 msg_text = data.get("message", "").strip()
                 if msg_text:
-                    await webrtc_manager.broadcast_chat_message(stream_id, user_id, username, msg_text, role="viewer")
+                    await webrtc_manager.broadcast_chat_message(stream_code, user_id, username, msg_text, role="viewer")
 
             elif message_type == "request_go_live":
-                # Viewer wants to jump to live edge — request keyframe from broadcaster
-                await webrtc_manager.request_go_live(stream_id, user_id)
+                await webrtc_manager.request_go_live(stream_code, user_id)
 
             elif message_type == "ping":
                 await websocket.send_json({"type": "pong"})
@@ -193,17 +191,17 @@ async def webrtc_test_view_websocket(
                 logger.warning(f"Unknown message type from viewer: {message_type}")
     
     except WebSocketDisconnect:
-        logger.info(f"TEST MODE: Viewer WebSocket disconnected: stream_id={stream_id}, user_id={user_id}")
+        logger.info(f"TEST MODE: Viewer WebSocket disconnected: stream_code={stream_code}, user_id={user_id}")
     except Exception as e:
         logger.error(f"TEST MODE: Viewer WebSocket error: {e}")
     finally:
         webrtc_manager.disconnect(websocket)
 
 # WebSocket endpoint for WebRTC signaling - Broadcaster
-@router.websocket("/ws/broadcast/{stream_id}")
+@router.websocket("/ws/broadcast/{stream_code}")
 async def webrtc_broadcast_websocket(
     websocket: WebSocket,
-    stream_id: int,
+    stream_code: str,
     token: str,
     db: Session = Depends(get_db)
 ):
@@ -211,7 +209,7 @@ async def webrtc_broadcast_websocket(
     
     # Accept WebSocket connection FIRST
     await websocket.accept()
-    logger.info(f"Broadcaster WebSocket accepted for stream_id={stream_id}")
+    logger.info(f"Broadcaster WebSocket accepted for stream_code={stream_code}")
     
     # Authenticate user from token
     try:
@@ -225,7 +223,7 @@ async def webrtc_broadcast_websocket(
             return
         
         user_id = result.data.id
-        logger.info(f"✅ Authenticated broadcaster: user_id={user_id}, stream_id={stream_id}")
+        logger.info(f"Authenticated broadcaster: user_id={user_id}, stream_code={stream_code}")
     except Exception as e:
         logger.error(f"Authentication exception: {e}", exc_info=True)
         await websocket.close(code=4003, reason="Authentication failed")
@@ -234,24 +232,24 @@ async def webrtc_broadcast_websocket(
     # Get or create stream (optional database tracking)
     service = StreamingService(db)
     try:
-        stream = service.get_stream(stream_id)
+        stream_result = service.get_stream_by_code(stream_code)
         
         # If stream exists, verify ownership
-        if stream and stream["stream"].user_id != user_id:
-            logger.warning(f"Stream {stream_id} belongs to another user")
+        if stream_result and stream_result["stream"].user_id != user_id:
+            logger.warning(f"Stream {stream_code} belongs to another user")
             await websocket.close(code=4005, reason="Not authorized")
             return
         
         # Mark stream as live if it exists
-        if stream:
-            service.start_stream(stream_id, user_id)
+        if stream_result:
+            service.start_stream(stream_result["stream"].id, user_id)
     except Exception as e:
         # Stream doesn't exist in DB - that's OK, WebRTC will still work
-        logger.info(f"Stream {stream_id} not in database, proceeding with WebRTC only: {e}")
+        logger.info(f"Stream {stream_code} not in database, proceeding with WebRTC only: {e}")
     
     # Connect broadcaster (this works without DB stream)
-    logger.info(f"Connecting broadcaster - stream_id={stream_id}, user_id={user_id}")
-    result = await webrtc_manager.connect_broadcaster(websocket, stream_id, user_id, skip_accept=True)
+    logger.info(f"Connecting broadcaster - stream_code={stream_code}, user_id={user_id}")
+    result = await webrtc_manager.connect_broadcaster(websocket, stream_code, user_id, skip_accept=True)
     
     if not result["success"]:
         return  # Already closed in connect_broadcaster
@@ -265,34 +263,29 @@ async def webrtc_broadcast_websocket(
             message_type = data.get("type")
             
             if message_type == "answer":
-                # Broadcaster sending answer to a viewer
                 await webrtc_manager.handle_signal(websocket, data)
             
             elif message_type == "ice_candidate":
-                # ICE candidate from broadcaster
                 await webrtc_manager.handle_signal(websocket, data)
             
             elif message_type == "chat_message":
-                # Chat message from broadcaster
                 username = data.get("username", "Broadcaster")
                 msg_text = data.get("message", "").strip()
                 if msg_text:
-                    await webrtc_manager.broadcast_chat_message(stream_id, user_id, username, msg_text, role="broadcaster")
+                    await webrtc_manager.broadcast_chat_message(stream_code, user_id, username, msg_text, role="broadcaster")
 
             elif message_type == "sync_timestamp":
-                # Broadcaster sends its current playback timestamp — relay to viewers
                 broadcaster_ts = data.get("broadcaster_ts", 0)
-                await webrtc_manager.relay_sync_timestamp(stream_id, broadcaster_ts)
+                await webrtc_manager.relay_sync_timestamp(stream_code, broadcaster_ts)
 
             elif message_type == "ping":
-                # Keep-alive ping
                 await websocket.send_json({"type": "pong"})
             
             else:
                 logger.warning(f"Unknown message type from broadcaster: {message_type}")
     
     except WebSocketDisconnect:
-        logger.info(f"Broadcaster WebSocket disconnected: stream_id={stream_id}")
+        logger.info(f"Broadcaster WebSocket disconnected: stream_code={stream_code}")
     except Exception as e:
         logger.error(f"Broadcaster WebSocket error: {e}")
     finally:
@@ -301,15 +294,17 @@ async def webrtc_broadcast_websocket(
         
         # Mark stream as offline in database
         try:
-            service.end_stream(stream_id, user_id)
+            stream_result = service.get_stream_by_code(stream_code)
+            if stream_result:
+                service.end_stream(stream_result["stream"].id, user_id)
         except Exception as e:
             logger.warning(f"Could not mark stream as offline: {e}")
 
 # WebSocket endpoint for WebRTC signaling - Viewer
-@router.websocket("/ws/view/{stream_id}")
+@router.websocket("/ws/view/{stream_code}")
 async def webrtc_view_websocket(
     websocket: WebSocket,
-    stream_id: int,
+    stream_code: str,
     token: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
@@ -329,26 +324,24 @@ async def webrtc_view_websocket(
                 user_id = result.data.id
                 logger.info(f"Authenticated viewer: user_id={user_id}")
             else:
-                # Allow anonymous viewing
                 user_id = hash(websocket) % 1000000
                 logger.info(f"Anonymous viewer (auth failed): user_id={user_id}")
         except Exception as e:
             user_id = hash(websocket) % 1000000
             logger.info(f"Anonymous viewer (exception): user_id={user_id}")
     else:
-        # Anonymous viewer
         user_id = hash(websocket) % 1000000
         logger.info(f"Anonymous viewer (no token): user_id={user_id}")
     
     # Check if stream exists in DB (optional)
     service = StreamingService(db)
     try:
-        stream = service.get_stream(stream_id)
-        if stream:
-            logger.info(f"Stream {stream_id} found in database")
+        stream_result = service.get_stream_by_code(stream_code)
+        if stream_result:
+            logger.info(f"Stream {stream_code} found in database")
             # Block broadcaster from joining their own stream as viewer
-            if stream["stream"].user_id == user_id:
-                logger.warning(f"User {user_id} tried to view their own stream {stream_id}")
+            if stream_result["stream"].user_id == user_id:
+                logger.warning(f"User {user_id} tried to view their own stream {stream_code}")
                 await websocket.send_json({
                     "type": "error",
                     "message": "You cannot join your own stream as a viewer"
@@ -356,12 +349,11 @@ async def webrtc_view_websocket(
                 await websocket.close(code=4006, reason="Cannot view own stream")
                 return
     except Exception as e:
-        # Stream doesn't exist in DB - that's OK, WebRTC will still work if broadcaster is connected
-        logger.info(f"Stream {stream_id} not in database, proceeding with WebRTC only: {e}")
+        logger.info(f"Stream {stream_code} not in database, proceeding with WebRTC only: {e}")
     
     # Connect viewer (works without DB stream if broadcaster is connected)
-    logger.info(f"Connecting viewer - stream_id={stream_id}, user_id={user_id}")
-    result = await webrtc_manager.connect_viewer(websocket, stream_id, user_id, skip_accept=True)
+    logger.info(f"Connecting viewer - stream_code={stream_code}, user_id={user_id}")
+    result = await webrtc_manager.connect_viewer(websocket, stream_code, user_id, skip_accept=True)
     
     if not result["success"]:
         return  # Already handled in connect_viewer
@@ -375,33 +367,28 @@ async def webrtc_view_websocket(
             message_type = data.get("type")
             
             if message_type == "offer":
-                # Viewer sending offer to broadcaster
                 await webrtc_manager.handle_signal(websocket, data)
             
             elif message_type == "ice_candidate":
-                # ICE candidate from viewer
                 await webrtc_manager.handle_signal(websocket, data)
             
             elif message_type == "chat_message":
-                # Chat message from viewer
                 username = data.get("username", "Viewer")
                 msg_text = data.get("message", "").strip()
                 if msg_text:
-                    await webrtc_manager.broadcast_chat_message(stream_id, user_id, username, msg_text, role="viewer")
+                    await webrtc_manager.broadcast_chat_message(stream_code, user_id, username, msg_text, role="viewer")
 
             elif message_type == "request_go_live":
-                # Viewer wants to jump to live edge — request keyframe from broadcaster
-                await webrtc_manager.request_go_live(stream_id, user_id)
+                await webrtc_manager.request_go_live(stream_code, user_id)
 
             elif message_type == "ping":
-                # Keep-alive ping
                 await websocket.send_json({"type": "pong"})
             
             else:
                 logger.warning(f"Unknown message type from viewer: {message_type}")
     
     except WebSocketDisconnect:
-        logger.info(f"Viewer WebSocket disconnected: stream_id={stream_id}, user_id={user_id}")
+        logger.info(f"Viewer WebSocket disconnected: stream_code={stream_code}, user_id={user_id}")
     except Exception as e:
         logger.error(f"Viewer WebSocket error: {e}")
     finally:

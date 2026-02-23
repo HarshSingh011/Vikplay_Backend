@@ -4,20 +4,30 @@ from typing import List, Optional
 from ..models.streaming_models import Stream, StreamChatMessage
 import secrets
 import string
+import random
 
 class StreamingRepository:
     def __init__(self, db: Session):
         self.db = db
 
+    def _generate_stream_code(self) -> str:
+        """Generate a unique 6-digit stream code (100000–999999)"""
+        while True:
+            code = str(random.randint(100000, 999999))
+            if not self.db.query(Stream).filter(Stream.stream_code == code).first():
+                return code
+
     def create_stream(self, user_id: int, title: str, description: Optional[str] = None) -> Stream:
-        # Generate unique stream key
+        # Generate unique stream key and stream code
         stream_key = self._generate_stream_key()
+        stream_code = self._generate_stream_code()
 
         stream = Stream(
             user_id=user_id,
             title=title,
             description=description,
-            stream_key=stream_key
+            stream_key=stream_key,
+            stream_code=stream_code
         )
         self.db.add(stream)
         self.db.commit()
@@ -26,6 +36,10 @@ class StreamingRepository:
 
     def get_stream_by_id(self, stream_id: int) -> Optional[Stream]:
         return self.db.query(Stream).filter(Stream.id == stream_id).first()
+
+    def get_stream_by_code(self, stream_code: str) -> Optional[Stream]:
+        """Look up a stream by its 6-digit public code"""
+        return self.db.query(Stream).filter(Stream.stream_code == stream_code).first()
 
     def get_stream_by_key(self, stream_key: str) -> Optional[Stream]:
         return self.db.query(Stream).filter(Stream.stream_key == stream_key).first()
