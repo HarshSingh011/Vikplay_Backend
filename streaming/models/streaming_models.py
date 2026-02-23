@@ -10,10 +10,11 @@ class Stream(Base):
     stream_code = Column(String(6), unique=True, index=True, nullable=False)  # 6-digit public ID
     title = Column(String, index=True)
     description = Column(Text, nullable=True)
-    user_id = Column(Integer, ForeignKey("users.id"), unique=True, index=True)  # One stream per user
+    user_id = Column(Integer, ForeignKey("users.id"), index=True)  # Multiple streams per user (only one LIVE at a time)
     stream_key = Column(String, unique=True, index=True)
     is_live = Column(Boolean, default=False)
     viewer_count = Column(Integer, default=0)
+    max_viewer_count = Column(Integer, default=0)  # Peak concurrent viewers
     thumbnail_url = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     started_at = Column(DateTime(timezone=True), nullable=True)

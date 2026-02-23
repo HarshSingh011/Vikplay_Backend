@@ -289,14 +289,24 @@ async def webrtc_broadcast_websocket(
     except Exception as e:
         logger.error(f"Broadcaster WebSocket error: {e}")
     finally:
+        # Read peak viewer count BEFORE disconnect clears it
+        peak_viewers = webrtc_manager.get_max_viewer_count(stream_code)
+        
         # Disconnect and cleanup
         webrtc_manager.disconnect(websocket)
         
-        # Mark stream as offline in database
+        # Mark stream as offline in database and save peak viewers
         try:
             stream_result = service.get_stream_by_code(stream_code)
             if stream_result:
-                service.end_stream(stream_result["stream"].id, user_id)
+                stream_obj = stream_result["stream"]
+                # Update max_viewer_count if in-memory peak is higher
+                if peak_viewers > (stream_obj.max_viewer_count or 0):
+                    from ..repositories.streaming_repository import StreamingRepository
+                    repo = StreamingRepository(db)
+                    repo.update_max_viewers(stream_obj, peak_viewers)
+                service.end_stream(stream_obj.id, user_id)
+                logger.info(f"Stream {stream_code} ended. Peak viewers: {peak_viewers}")
         except Exception as e:
             logger.warning(f"Could not mark stream as offline: {e}")
 

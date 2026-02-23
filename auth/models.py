@@ -17,8 +17,8 @@ class User(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
-    # Relationship to streams (lazy loading to avoid circular import)
-    streams = relationship("Stream", back_populates="user", lazy="dynamic")
+    # Relationship to streams
+    streams = relationship("Stream", back_populates="user")
 
 class OTP(Base):
     __tablename__ = "otps"

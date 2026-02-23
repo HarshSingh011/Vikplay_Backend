@@ -31,6 +31,9 @@ class WebRTCManager:
         
         # user_id -> stream_code mapping to enforce one stream per user
         self.active_streams_by_user: Dict[int, str] = {}
+        
+        # stream_code -> peak viewer count (in-memory tracking)
+        self.max_viewers: Dict[str, int] = {}
 
     async def connect_broadcaster(
         self, 
@@ -122,7 +125,12 @@ class WebRTCManager:
         self.viewers[stream_code].add(connection)
         self.connections[websocket] = connection
         
-        logger.info(f"Viewer connected: user_id={user_id}, stream_code={stream_code}, total_viewers={len(self.viewers[stream_code])}")
+        # Track peak viewer count
+        current_count = len(self.viewers[stream_code])
+        if current_count > self.max_viewers.get(stream_code, 0):
+            self.max_viewers[stream_code] = current_count
+        
+        logger.info(f"Viewer connected: user_id={user_id}, stream_code={stream_code}, total_viewers={current_count}, peak={self.max_viewers.get(stream_code, 0)}")
         
         # Notify viewer that they're connected
         await websocket.send_json({
@@ -178,6 +186,10 @@ class WebRTCManager:
                         logger.error(f"Error notifying/closing viewer: {e}")
                 
                 del self.viewers[stream_code]
+            
+            # Clean up peak viewer tracking (caller should read it before disconnect)
+            if stream_code in self.max_viewers:
+                del self.max_viewers[stream_code]
             
             logger.info(f"Broadcaster disconnected: user_id={user_id}, stream_code={stream_code}")
         
@@ -333,6 +345,10 @@ class WebRTCManager:
     def get_viewer_count(self, stream_code: str) -> int:
         """Get the number of viewers for a stream"""
         return len(self.viewers.get(stream_code, set()))
+
+    def get_max_viewer_count(self, stream_code: str) -> int:
+        """Get the peak viewer count for a stream"""
+        return self.max_viewers.get(stream_code, 0)
 
     def is_user_streaming(self, user_id: int) -> Optional[str]:
         """Check if a user is currently streaming, returns stream_code if yes"""

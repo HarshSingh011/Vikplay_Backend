@@ -1,166 +1,134 @@
-from fastapi import APIRouter, Depends, HTTPException, status, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from typing import List
 from database import get_db
 from auth.services import get_user_service
 from ..services.streaming_service import StreamingService
-from ..schemas.streaming_schemas import StreamCreate, StreamUpdateRequest, Stream
-from ..utils.websocket_manager import stream_ws_manager
+from ..schemas.streaming_schemas import StreamStartRequest
 
 router = APIRouter(
     prefix="/api/streaming",
-    tags=["streaming"]
+    tags=["streaming"],
 )
 
-# Security scheme
 security = HTTPBearer()
 
-# Dependency to get current user
+
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     user_service = get_user_service(db)
     result = user_service.get_user_by_token(credentials.credentials)
-
     if not result.success:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=result.message,
-            headers={"WWW-Authenticate": "Bearer"}
+            headers={"WWW-Authenticate": "Bearer"},
         )
-
     return {
         "user_id": result.data.id,
         "username": result.data.username,
-        "email": result.data.email
+        "email": result.data.email,
     }
 
-# Dependency to get streaming service
+
 def get_streaming_service(db: Session = Depends(get_db)) -> StreamingService:
     return StreamingService(db)
 
-@router.post("/streams/", response_model=dict)
-async def create_stream(
-    stream_data: StreamCreate,
-    current_user: dict = Depends(get_current_user),
-    service: StreamingService = Depends(get_streaming_service)
-):
-    """Create a new stream for the authenticated user"""
-    return service.create_stream(current_user["user_id"], stream_data)
 
-@router.get("/streams/my", response_model=List[dict])
-async def get_my_streams(
-    current_user: dict = Depends(get_current_user),
-    service: StreamingService = Depends(get_streaming_service)
-):
-    """Get all streams for the authenticated user"""
-    return service.get_user_streams(current_user["user_id"])
+# ── Start / End ──────────────────────────────────────────
 
-@router.get("/streams/live", response_model=List[Stream])
+
+@router.post("/streams/start", response_model=dict)
+async def start_stream(
+    data: StreamStartRequest,
+    current_user: dict = Depends(get_current_user),
+    service: StreamingService = Depends(get_streaming_service),
+):
+    """Create a stream AND immediately go live.
+    Accepts title, description (optional) and thumbnail_url (optional).
+    Enforces one live stream per user — returns 409 if already streaming."""
+    return service.quick_start_stream(current_user["user_id"], data)
+
+
+@router.post("/streams/end/{stream_code}", response_model=dict)
+async def end_stream(
+    stream_code: str,
+    current_user: dict = Depends(get_current_user),
+    service: StreamingService = Depends(get_streaming_service),
+):
+    """End a live stream by its 6-digit code (owner only)."""
+    return service.end_stream_by_code(stream_code, current_user["user_id"])
+
+
+# ── Discovery & Viewing ─────────────────────────────────
+
+
+@router.get("/streams/live", response_model=List[dict])
 async def get_live_streams(
-    service: StreamingService = Depends(get_streaming_service)
+    service: StreamingService = Depends(get_streaming_service),
 ):
-    """Get all currently live streams"""
-    return service.get_live_streams()
+    """Get all currently live streams."""
+    streams = service.get_live_streams()
+    return [
+        {
+            "stream_code": s.stream_code,
+            "title": s.title,
+            "description": s.description,
+            "user_id": s.user_id,
+            "viewer_count": s.viewer_count,
+            "thumbnail_url": s.thumbnail_url,
+            "started_at": s.started_at.isoformat() if s.started_at else None,
+        }
+        for s in streams
+    ]
 
-@router.get("/streams/{stream_id}", response_model=dict)
-async def get_stream(
-    stream_id: int,
-    service: StreamingService = Depends(get_streaming_service)
-):
-    """Get a specific stream by ID"""
-    result = service.get_stream(stream_id)
-    if not result:
-        raise HTTPException(status_code=404, detail="Stream not found")
-    return result
 
 @router.get("/streams/code/{stream_code}", response_model=dict)
 async def get_stream_by_code(
     stream_code: str,
-    service: StreamingService = Depends(get_streaming_service)
+    service: StreamingService = Depends(get_streaming_service),
 ):
-    """Get a specific stream by its 6-digit stream code"""
+    """Get a specific stream by its 6-digit stream code."""
     result = service.get_stream_by_code(stream_code)
     if not result:
         raise HTTPException(status_code=404, detail="Stream not found")
     return result
 
-@router.post("/streams/{stream_id}/chat", response_model=dict)
-async def send_chat_message(
-    stream_id: int,
-    message: str,
+
+@router.get("/streams/search", response_model=List[dict])
+async def search_streams(
+    q: str = Query(..., min_length=1, description="Search query"),
+    live_only: bool = Query(False, description="Only return live streams"),
+    service: StreamingService = Depends(get_streaming_service),
+):
+    """Search streams by title or description."""
+    return service.search_streams(q, live_only)
+
+
+# ── History ──────────────────────────────────────────────
+
+
+@router.get("/streams/history/me", response_model=List[dict])
+async def get_my_stream_history(
     current_user: dict = Depends(get_current_user),
-    service: StreamingService = Depends(get_streaming_service)
+    service: StreamingService = Depends(get_streaming_service),
 ):
-    """Send a chat message to a live stream"""
-    return service.add_chat_message(
-        stream_id,
-        current_user["user_id"],
-        current_user["username"],
-        message
-    )
+    """All past streams for the authenticated user with date, time,
+    duration, start/end and peak viewers."""
+    return service.get_stream_history(current_user["user_id"])
 
-@router.get("/streams/{stream_id}/chat", response_model=List[dict])
+
+# ── Chat ─────────────────────────────────────────────────
+
+
+@router.get("/streams/code/{stream_code}/chat", response_model=List[dict])
 async def get_stream_chat(
-    stream_id: int,
-    limit: int = 50,
-    service: StreamingService = Depends(get_streaming_service)
+    stream_code: str,
+    limit: int = Query(100, ge=1, le=500),
+    service: StreamingService = Depends(get_streaming_service),
 ):
-    """Get chat messages for a stream"""
-    return service.get_stream_chat(stream_id, limit)
-
-# WebSocket endpoints for real-time features
-
-@router.websocket("/ws/streams/{stream_id}")
-async def stream_websocket(
-    websocket: WebSocket,
-    stream_id: int,
-    db: Session = Depends(get_db)
-):
-    """WebSocket endpoint for real-time stream interactions"""
-    service = StreamingService(db)
-
-    # Verify stream exists
-    stream_result = service.get_stream(stream_id)
-    if not stream_result:
-        await websocket.close(code=4004)  # Stream not found
-        return
-
-    await stream_ws_manager.connect(websocket, stream_id)
-
-    try:
-        while True:
-            data = await websocket.receive_json()
-
-            message_type = data.get("type")
-
-            if message_type == "chat_message":
-                # Handle chat message
-                message_text = data.get("message", "").strip()
-                if not message_text:
-                    continue
-
-                # In a real app, you'd get user from token, but for demo:
-                user_id = data.get("user_id", 1)  # This should come from auth
-                username = data.get("username", "Anonymous")
-
-                # Add to database
-                chat_result = service.add_chat_message(stream_id, user_id, username, message_text)
-
-                # Broadcast to all connected clients
-                await stream_ws_manager.broadcast_chat_message(
-                    stream_id,
-                    chat_result["chat_message"].__dict__
-                )
-
-            elif message_type == "ping":
-                # Respond to ping
-                await websocket.send_json({"type": "pong"})
-
-    except WebSocketDisconnect:
-        stream_ws_manager.disconnect(websocket, stream_id)
-    except Exception as e:
-        stream_ws_manager.disconnect(websocket, stream_id)
-        print(f"WebSocket error: {e}")
+    """Get chat messages for a stream using its 6-digit code."""
+    return service.get_chat_by_stream_code(stream_code, limit)

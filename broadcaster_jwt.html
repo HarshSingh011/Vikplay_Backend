@@ -216,10 +216,25 @@
         <!-- Streaming Controls -->
         <div id="streamingSection" style="display:none;">
             <div class="form-group">
-                <label>Stream Code (6 digits):</label>
-                <input type="text" id="streamId" value="" placeholder="e.g. 482917" maxlength="6" pattern="[0-9]{6}">
+                <label>Stream Title <span style="color:red">*</span></label>
+                <input type="text" id="streamTitle" placeholder="e.g. Gaming Night — CS2 Ranked">
             </div>
-            
+            <div class="form-group">
+                <label>Description <span style="color:#aaa; font-weight:normal">(optional)</span></label>
+                <input type="text" id="streamDescription" placeholder="Tell viewers what this stream is about...">
+            </div>
+            <div class="form-group">
+                <label>Thumbnail URL <span style="color:#aaa; font-weight:normal">(optional)</span></label>
+                <input type="text" id="streamThumbnail" placeholder="https://example.com/thumbnail.jpg">
+            </div>
+
+            <!-- Stream code shown after API creates the stream -->
+            <div id="streamCodeCard" style="display:none; background:#f0fdf4; border:2px solid #10b981; border-radius:10px; padding:16px; margin:12px 0; text-align:center;">
+                <div style="font-size:12px; color:#065f46; font-weight:bold; letter-spacing:1px; text-transform:uppercase;">Share this code with your viewers</div>
+                <div id="streamCodeDisplay" style="font-size:40px; font-weight:bold; color:#059669; letter-spacing:8px; margin:8px 0;">——————</div>
+                <button onclick="copyCode()" style="background:#059669; color:white; border:none; padding:6px 16px; border-radius:5px; cursor:pointer; font-size:13px;">📋 Copy Code</button>
+            </div>
+
             <div id="streamStatus" class="status offline">⚫ Not Streaming</div>
             
             <video id="localVideo" autoplay muted playsinline></video>
@@ -273,14 +288,6 @@
         let uptimeInterval = null;
         let syncInterval = null;
 
-        // Auto-generate a random 6-digit stream code on page load
-        function generateStreamCode() {
-            return String(Math.floor(100000 + Math.random() * 900000));
-        }
-        document.addEventListener('DOMContentLoaded', () => {
-            document.getElementById('streamId').value = generateStreamCode();
-        });
-        
         const rtcConfig = {
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
@@ -358,49 +365,75 @@
             }
         });
         
+        let currentStreamCode = null;
+
         async function startStream() {
             if (!jwtToken) {
                 log('❌ Please login first!', 'error');
                 return;
             }
-            
-            const streamId = document.getElementById('streamId').value.trim();
-            if (!streamId || streamId.length !== 6) {
-                log('❌ Stream code must be exactly 6 digits!', 'error');
+
+            const title = document.getElementById('streamTitle').value.trim();
+            if (!title) {
+                log('❌ Please enter a stream title!', 'error');
                 return;
             }
-            
+
+            const description = document.getElementById('streamDescription').value.trim() || null;
+            const thumbnail_url = document.getElementById('streamThumbnail').value.trim() || null;
+
             try {
-                log(`📺 Stream Code: ${streamId}  — share this code with viewers!`, 'success');
+                // ── Step 1: Create stream via REST API ──────────────────
+                log('📡 Creating stream on server...');
+                const res = await fetch(`${API_URL}/api/streaming/streams/start`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${jwtToken}`
+                    },
+                    body: JSON.stringify({ title, description, thumbnail_url })
+                });
+
+                const streamData = await res.json();
+
+                if (!res.ok) {
+                    const msg = streamData.detail || 'Failed to create stream';
+                    log(`❌ ${msg}`, 'error');
+                    return;
+                }
+
+                currentStreamCode = streamData.stream_code;
+                log(`✅ Stream created! Code: ${currentStreamCode}`, 'success');
+
+                // Show the stream code card
+                document.getElementById('streamCodeDisplay').textContent = currentStreamCode;
+                document.getElementById('streamCodeCard').style.display = 'block';
+
+                // ── Step 2: Get camera / mic ─────────────────────────────
                 log('🎥 Getting camera access...');
                 localStream = await navigator.mediaDevices.getUserMedia({
                     video: { width: 1280, height: 720 },
                     audio: true
                 });
-                
                 document.getElementById('localVideo').srcObject = localStream;
                 log('✅ Camera and microphone access granted!', 'success');
-                
-                // Connect to WebSocket WITH JWT token
-                const wsUrl = `${WS_URL}/api/webrtc/ws/broadcast/${streamId}?token=${jwtToken}`;
-                log(`🔌 Connecting to WebSocket...`);
-                log(`🔑 Using token: ${jwtToken.substring(0, 50)}...`);
-                
+
+                // ── Step 3: Connect WebSocket ────────────────────────────
+                const wsUrl = `${WS_URL}/api/webrtc/ws/broadcast/${currentStreamCode}?token=${jwtToken}`;
+                log('🔌 Connecting to WebSocket...');
                 websocket = new WebSocket(wsUrl);
-                
+
                 websocket.onopen = () => {
                     log('✅ WebSocket connected! You are LIVE!', 'success');
-                    log(`🔴 LIVE — Stream Code: ${streamId}`, 'success');
+                    log(`🔴 LIVE — Stream Code: ${currentStreamCode}  (share with viewers!)`, 'success');
                     document.getElementById('streamStatus').className = 'status live';
-                    document.getElementById('streamStatus').textContent = `🔴 LIVE — Code: ${streamId}`;
+                    document.getElementById('streamStatus').textContent = `🔴 LIVE — Code: ${currentStreamCode}`;
                     document.getElementById('chatSection').style.display = 'block';
-                    
-                    // Start uptime counter
+
                     streamStartTime = Date.now();
                     updateUptime();
                     uptimeInterval = setInterval(updateUptime, 1000);
 
-                    // Start sending sync timestamps every 2 seconds
                     syncInterval = setInterval(() => {
                         if (websocket && websocket.readyState === WebSocket.OPEN) {
                             websocket.send(JSON.stringify({
@@ -410,29 +443,35 @@
                         }
                     }, 2000);
                 };
-                
+
                 websocket.onmessage = async (event) => {
                     const data = JSON.parse(event.data);
                     await handleSignal(data);
                 };
-                
+
                 websocket.onerror = (error) => {
                     log(`❌ WebSocket error: ${error}`, 'error');
                 };
-                
+
                 websocket.onclose = (event) => {
                     log(`🔌 WebSocket closed (Code: ${event.code}, Reason: ${event.reason || 'None'})`);
                     document.getElementById('streamStatus').className = 'status offline';
                     document.getElementById('streamStatus').textContent = '⚫ Not Streaming';
-                    
-                    if (uptimeInterval) {
-                        clearInterval(uptimeInterval);
-                        uptimeInterval = null;
-                    }
+                    if (uptimeInterval) { clearInterval(uptimeInterval); uptimeInterval = null; }
                 };
-                
+
             } catch (error) {
                 log(`❌ Error: ${error.message}`, 'error');
+            }
+        }
+
+        async function copyCode() {
+            if (!currentStreamCode) return;
+            try {
+                await navigator.clipboard.writeText(currentStreamCode);
+                log('📋 Stream code copied to clipboard!', 'success');
+            } catch (e) {
+                log(`Stream code: ${currentStreamCode}`, 'success');
             }
         }
         
@@ -576,35 +615,43 @@
                 `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
         }
         
-        function stopStream() {
-            if (websocket) {
-                websocket.close();
-                websocket = null;
+        async function stopStream() {
+            // ── Step 1: Call REST API to mark stream as ended ────────
+            if (currentStreamCode && jwtToken) {
+                try {
+                    const res = await fetch(`${API_URL}/api/streaming/streams/end/${currentStreamCode}`, {
+                        method: 'POST',
+                        headers: { 'Authorization': `Bearer ${jwtToken}` }
+                    });
+                    if (res.ok) {
+                        log('✅ Stream ended on server', 'success');
+                    } else {
+                        const d = await res.json();
+                        log(`⚠️ End stream API: ${d.detail || 'unknown error'}`);
+                    }
+                } catch (e) {
+                    log(`⚠️ Could not notify server: ${e.message}`);
+                }
             }
-            
-            if (localStream) {
-                localStream.getTracks().forEach(track => track.stop());
-                localStream = null;
-            }
-            
+
+            // ── Step 2: Close WebSocket & media ─────────────────────
+            if (websocket) { websocket.close(); websocket = null; }
+            if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
             Object.keys(peerConnections).forEach(closePeerConnection);
-            
-            if (uptimeInterval) {
-                clearInterval(uptimeInterval);
-                uptimeInterval = null;
-            }
-            if (syncInterval) {
-                clearInterval(syncInterval);
-                syncInterval = null;
-            }
-            
+            if (uptimeInterval) { clearInterval(uptimeInterval); uptimeInterval = null; }
+            if (syncInterval) { clearInterval(syncInterval); syncInterval = null; }
+
             document.getElementById('localVideo').srcObject = null;
             document.getElementById('viewers').textContent = '0';
             document.getElementById('connections').textContent = '0';
             document.getElementById('uptime').textContent = '00:00';
             document.getElementById('chatSection').style.display = 'none';
             document.getElementById('chatMessages').innerHTML = '';
-            
+            document.getElementById('streamCodeCard').style.display = 'none';
+            document.getElementById('streamStatus').className = 'status offline';
+            document.getElementById('streamStatus').textContent = '⚫ Not Streaming';
+            currentStreamCode = null;
+
             log('⏹️ Streaming stopped', 'success');
         }
         

@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import and_
+from sqlalchemy import and_, or_
 from typing import List, Optional
 from ..models.streaming_models import Stream, StreamChatMessage
 import secrets
@@ -17,7 +17,7 @@ class StreamingRepository:
             if not self.db.query(Stream).filter(Stream.stream_code == code).first():
                 return code
 
-    def create_stream(self, user_id: int, title: str, description: Optional[str] = None) -> Stream:
+    def create_stream(self, user_id: int, title: str, description: Optional[str] = None, thumbnail_url: Optional[str] = None) -> Stream:
         # Generate unique stream key and stream code
         stream_key = self._generate_stream_key()
         stream_code = self._generate_stream_code()
@@ -26,6 +26,7 @@ class StreamingRepository:
             user_id=user_id,
             title=title,
             description=description,
+            thumbnail_url=thumbnail_url,
             stream_key=stream_key,
             stream_code=stream_code
         )
@@ -72,13 +73,6 @@ class StreamingRepository:
         from datetime import datetime
         return self.update_stream(stream, is_live=False, ended_at=datetime.utcnow())
 
-    def increment_viewer_count(self, stream: Stream) -> Stream:
-        return self.update_stream(stream, viewer_count=stream.viewer_count + 1)
-
-    def decrement_viewer_count(self, stream: Stream) -> Stream:
-        new_count = max(0, stream.viewer_count - 1)
-        return self.update_stream(stream, viewer_count=new_count)
-
     def add_chat_message(self, stream_id: int, user_id: int, username: str, message: str) -> StreamChatMessage:
         chat_message = StreamChatMessage(
             stream_id=stream_id,
@@ -98,6 +92,39 @@ class StreamingRepository:
 
     def get_live_streams(self) -> List[Stream]:
         return self.db.query(Stream).filter(Stream.is_live == True).all()
+
+    def get_user_stream_history(self, user_id: int) -> List[Stream]:
+        """All streams by this user, newest first"""
+        return (
+            self.db.query(Stream)
+            .filter(Stream.user_id == user_id)
+            .order_by(Stream.created_at.desc())
+            .all()
+        )
+
+    def search_streams(self, query: str, live_only: bool = False) -> List[Stream]:
+        """Search streams by title or description (case-insensitive)"""
+        pattern = f"%{query}%"
+        filters = [
+            or_(
+                Stream.title.ilike(pattern),
+                Stream.description.ilike(pattern),
+            )
+        ]
+        if live_only:
+            filters.append(Stream.is_live == True)
+        return (
+            self.db.query(Stream)
+            .filter(and_(*filters))
+            .order_by(Stream.created_at.desc())
+            .all()
+        )
+
+    def update_max_viewers(self, stream: Stream, current_viewers: int) -> Stream:
+        """Update max_viewer_count if current count exceeds it"""
+        if current_viewers > (stream.max_viewer_count or 0):
+            return self.update_stream(stream, max_viewer_count=current_viewers)
+        return stream
 
     def _generate_stream_key(self) -> str:
         """Generate a unique stream key"""
