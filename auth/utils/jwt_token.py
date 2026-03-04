@@ -27,7 +27,7 @@ class JWTUtils:
 
     @property
     def refresh_token_expire_days(self):
-        return int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
+        return int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "30"))
 
     def create_access_token(self, data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
         """Create a JWT access token"""
