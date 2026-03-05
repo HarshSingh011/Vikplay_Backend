@@ -70,7 +70,15 @@ class WebRTCManager:
         self.active_streams_by_user[user_id] = stream_code
         
         logger.info(f"Broadcaster connected: user_id={user_id}, stream_code={stream_code}")
-        
+
+        # Confirm to the broadcaster that they are connected
+        await websocket.send_json({
+            "type": "connected",
+            "role": "broadcaster",
+            "stream_code": stream_code,
+            "message": "You are live as the broadcaster."
+        })
+
         # Notify all viewers that broadcaster is ready
         await self.broadcast_to_viewers(stream_code, {
             "type": "broadcaster_ready",
