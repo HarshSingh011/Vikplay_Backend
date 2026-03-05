@@ -349,18 +349,85 @@ async def webrtc_view_websocket(
         stream_result = service.get_stream_by_code(stream_code)
         if stream_result:
             logger.info(f"Stream {stream_code} found in database")
-            # Block broadcaster from joining their own stream as viewer
+
+            # ── Owner reconnecting as broadcaster via viewer endpoint ──────────
             if stream_result["stream"].user_id == user_id:
-                logger.warning(f"User {user_id} tried to view their own stream {stream_code}")
+                logger.info(f"Owner {user_id} reconnecting as broadcaster via viewer endpoint, stream_code={stream_code}")
+
+                # Evict any stale/dead broadcaster entry for this stream
+                webrtc_manager.force_clear_stale_broadcaster(stream_code, user_id)
+
+                # Ensure the stream is marked live in DB
+                try:
+                    service.start_stream(stream_result["stream"].id, user_id)
+                except Exception:
+                    pass  # already live is fine
+
+                # Connect as broadcaster (WebSocket already accepted above)
+                bc_result = await webrtc_manager.connect_broadcaster(
+                    websocket, stream_code, user_id, skip_accept=True
+                )
+                if not bc_result["success"]:
+                    return
+
+                # Notify owner that they are reconnected
                 await websocket.send_json({
-                    "type": "error",
-                    "message": "You cannot join your own stream as a viewer"
+                    "type": "reconnected",
+                    "role": "broadcaster",
+                    "stream_code": stream_code,
+                    "message": "You have been reconnected to your stream as the broadcaster."
                 })
-                await websocket.close(code=4006, reason="Cannot view own stream")
-                return
+
+                try:
+                    while True:
+                        data = await websocket.receive_json()
+                        message_type = data.get("type")
+
+                        if message_type == "answer":
+                            await webrtc_manager.handle_signal(websocket, data)
+                        elif message_type == "ice_candidate":
+                            await webrtc_manager.handle_signal(websocket, data)
+                        elif message_type == "chat_message":
+                            username = data.get("username", "Broadcaster")
+                            msg_text = data.get("message", "").strip()
+                            if msg_text:
+                                await webrtc_manager.broadcast_chat_message(
+                                    stream_code, user_id, username, msg_text, role="broadcaster"
+                                )
+                        elif message_type == "sync_timestamp":
+                            await webrtc_manager.relay_sync_timestamp(
+                                stream_code, data.get("broadcaster_ts", 0)
+                            )
+                        elif message_type == "ping":
+                            await websocket.send_json({"type": "pong"})
+                        else:
+                            logger.warning(f"Unknown message type from reconnected broadcaster: {message_type}")
+
+                except WebSocketDisconnect:
+                    logger.info(f"Reconnected broadcaster disconnected: stream_code={stream_code}")
+                except Exception as e:
+                    logger.error(f"Reconnected broadcaster error: {e}")
+                finally:
+                    peak_viewers = webrtc_manager.get_max_viewer_count(stream_code)
+                    webrtc_manager.disconnect(websocket)
+                    try:
+                        fresh = service.get_stream_by_code(stream_code)
+                        if fresh:
+                            stream_obj = fresh["stream"]
+                            if peak_viewers > (stream_obj.max_viewer_count or 0):
+                                from ..repositories.streaming_repository import StreamingRepository
+                                repo = StreamingRepository(db)
+                                repo.update_max_viewers(stream_obj, peak_viewers)
+                            service.end_stream(stream_obj.id, user_id)
+                            logger.info(f"Stream {stream_code} ended after broadcaster reconnect/disconnect. Peak viewers: {peak_viewers}")
+                    except Exception as e:
+                        logger.warning(f"Could not end stream after reconnected broadcaster left: {e}")
+                return  # done — skip the viewer path entirely
+            # ── End owner reconnection block ───────────────────────────────────
+
     except Exception as e:
         logger.info(f"Stream {stream_code} not in database, proceeding with WebRTC only: {e}")
-    
+
     # Connect viewer (works without DB stream if broadcaster is connected)
     logger.info(f"Connecting viewer - stream_code={stream_code}, user_id={user_id}")
     result = await webrtc_manager.connect_viewer(websocket, stream_code, user_id, skip_accept=True)
