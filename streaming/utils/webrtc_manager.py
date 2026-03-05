@@ -350,6 +350,24 @@ class WebRTCManager:
         """Get the peak viewer count for a stream"""
         return self.max_viewers.get(stream_code, 0)
 
+    def force_clear_stale_broadcaster(self, stream_code: str, user_id: int) -> bool:
+        """Remove a stale broadcaster entry for a stream if it belongs to user_id.
+        Used when the owner reconnects via the viewer endpoint.
+        Returns True if cleared (or already absent), False if owned by someone else."""
+        if stream_code not in self.broadcasters:
+            return True  # nothing to clear
+        existing = self.broadcasters[stream_code]
+        if existing.user_id != user_id:
+            return False  # belongs to a different broadcaster, leave it alone
+        # Evict the stale connection objects
+        if existing.websocket in self.connections:
+            del self.connections[existing.websocket]
+        del self.broadcasters[stream_code]
+        if user_id in self.active_streams_by_user:
+            del self.active_streams_by_user[user_id]
+        logger.info(f"Cleared stale broadcaster entry: user_id={user_id}, stream_code={stream_code}")
+        return True
+
     def is_user_streaming(self, user_id: int) -> Optional[str]:
         """Check if a user is currently streaming, returns stream_code if yes"""
         return self.active_streams_by_user.get(user_id)
