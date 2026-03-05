@@ -234,7 +234,7 @@ class WebRTCManager:
         
         if connection.role == 'broadcaster':
             target_viewer_id = data.get("target")
-            if signal_type in ['answer', 'ice_candidate']:
+            if signal_type in ['offer', 'answer', 'ice_candidate']:
                 await self.send_to_viewer(stream_code, target_viewer_id, data)
         
         elif connection.role == 'viewer':
