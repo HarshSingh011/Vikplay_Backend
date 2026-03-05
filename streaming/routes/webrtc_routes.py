@@ -73,6 +73,70 @@ async def get_active_webrtc_streams():
         "total": len(active_streams)
     }
 
+@router.get("/ice-servers", response_model=dict)
+async def get_ice_servers():
+    """
+    ## Get ICE server configuration (STUN + TURN)
+
+    Returns the ICE server list the Android/web client should pass into
+    `RTCPeerConnection`. Call this **once before creating any PeerConnection**.
+
+    Priority order:
+    1. If `METERED_API_KEY` + `METERED_APP_NAME` are set → fetches all TURN entries
+       live from Metered API (recommended — returns all 4 fallback URLs).
+    2. Otherwise falls back to static `TURN_URL` / `TURN_USERNAME` / `TURN_PASSWORD`.
+    3. If nothing is set, returns only STUN servers.
+    """
+    import os
+    import httpx
+
+    stun_servers = [
+        {"urls": "stun:stun.l.google.com:19302"},
+        {"urls": "stun:stun1.l.google.com:19302"},
+    ]
+
+    # ── Option 1: Metered dynamic credentials (all 4 TURN URLs) ─────────────
+    metered_api_key  = os.getenv("METERED_API_KEY")
+    metered_app_name = os.getenv("METERED_APP_NAME")  # e.g. "vikplay.metered.live"
+
+    if metered_api_key and metered_app_name:
+        try:
+            url = f"https://{metered_app_name}/api/v1/turn/credentials?apiKey={metered_api_key}"
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.get(url)
+                resp.raise_for_status()
+                metered_servers = resp.json()  # already a list of ICE server objects
+                if isinstance(metered_servers, list) and metered_servers:
+                    ice_servers = stun_servers + metered_servers
+                    return {"ice_servers": ice_servers, "turn_available": True}
+        except Exception as e:
+            logger.warning(f"Failed to fetch Metered TURN credentials: {e}. Falling back to static env.")
+
+    # ── Option 2: Static env vars ────────────────────────────────────────────
+    turn_url      = os.getenv("TURN_URL")
+    turn_username = os.getenv("TURN_USERNAME")
+    turn_password = os.getenv("TURN_PASSWORD")
+
+    ice_servers = list(stun_servers)
+    if turn_url and turn_username and turn_password:
+        ice_servers.append({
+            "urls":       turn_url,
+            "username":   turn_username,
+            "credential": turn_password,
+        })
+        if turn_url.startswith("turn:"):
+            turns_url = turn_url.replace("turn:", "turns:", 1)
+            ice_servers.append({
+                "urls":       turns_url,
+                "username":   turn_username,
+                "credential": turn_password,
+            })
+
+    return {
+        "ice_servers": ice_servers,
+        "turn_available": bool(turn_url and turn_username and turn_password),
+    }
+
 @router.get("/user-stream-status", response_model=dict)
 async def check_user_stream_status(
     current_user: dict = Depends(get_current_user)
