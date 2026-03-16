@@ -40,7 +40,12 @@ from call.schemas.call_schemas import (
     WSMessageType,
     GroupCallCreate
 )
+from call.schemas.contact_schemas import (
+    ContactCreate,
+    ContactUpdate
+)
 from call.utils.call_signaling_manager import call_signaling_manager
+from call.models.contact_models import Contact
 
 logger = logging.getLogger(__name__)
 
@@ -504,6 +509,264 @@ async def create_group_call(
             })
     
     return service._convert_to_response(call)
+
+
+# Contact Management Endpoints
+
+@router.post("/contacts/add", response_model=dict, status_code=status.HTTP_201_CREATED)
+async def add_contact(
+    contact_data: ContactCreate,
+    current_user: dict = Depends(get_current_user_simple),
+    db: Session = Depends(get_db)
+):
+    """
+    Add a user to your contact list with a nickname.
+    
+    Request body:
+    {
+      "email": "user@example.com",
+      "nickname": "John"
+    }
+    """
+    try:
+        email = contact_data.email.strip()
+        nickname = contact_data.nickname.strip()
+        
+        if not email or not nickname:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Both email and nickname are required"
+            )
+        
+        # Find the contact user by email
+        from auth.repositories.user_repository import user_repository
+        contact_user = user_repository.get_by_email(db, email)
+        
+        if not contact_user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"User with email {email} not found"
+            )
+        
+        # Prevent adding yourself as contact
+        current_uid = current_user["user_id"]
+        if isinstance(current_uid, str):
+            current_uid = int(current_uid)
+        
+        if contact_user.id == current_uid:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot add yourself as a contact"
+            )
+        
+        # Check if already exists
+        from call.repositories.contact_repository import ContactRepository
+        contact_repo = ContactRepository()
+        existing = contact_repo.get_contact_by_users(db, current_uid, contact_user.id)
+        
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"{email} is already in your contacts"
+            )
+        
+        # Add contact
+        contact = contact_repo.add_contact(
+            db,
+            user_id=current_uid,
+            contact_user_id=contact_user.id,
+            nickname=nickname
+        )
+        
+        logger.info(f"[CONTACT] User {current_uid} added contact: {contact_user.email} as {nickname}")
+        
+        return {
+            "success": True,
+            "message": f"Contact added: {nickname}",
+            "contact": {
+                "id": contact.id,
+                "contact_user_id": contact.contact_user_id,
+                "contact_email": contact_user.email,
+                "contact_username": contact_user.username,
+                "nickname": contact.nickname
+            }
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error adding contact: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to add contact"
+        )
+
+
+@router.get("/contacts")
+async def get_contacts(
+    skip: int = 0,
+    limit: int = 100,
+    current_user: dict = Depends(get_current_user_simple),
+    db: Session = Depends(get_db)
+):
+    """
+    Get your contact list.
+    Returns all contacts with their latest online status.
+    """
+    try:
+        current_uid = current_user["user_id"]
+        if isinstance(current_uid, str):
+            current_uid = int(current_uid)
+        
+        from call.repositories.contact_repository import ContactRepository
+        from auth.repositories.user_repository import user_repository
+        
+        contact_repo = ContactRepository()
+        contacts = contact_repo.get_contacts(db, current_uid, skip, limit)
+        
+        # Enrich with user info and online status
+        result = []
+        for contact in contacts:
+            contact_user = user_repository.get(db, contact.contact_user_id)
+            if contact_user:
+                result.append({
+                    "id": contact.id,
+                    "contact_user_id": contact.contact_user_id,
+                    "nickname": contact.nickname,
+                    "email": contact_user.email,
+                    "username": contact_user.username,
+                    "phone_number": contact_user.phone_number,
+                    "is_online": call_signaling_manager.is_user_online(str(contact.contact_user_id))
+                })
+        
+        total = db.query(Contact).filter(Contact.user_id == current_uid).count()
+        
+        return {
+            "contacts": result,
+            "total": total,
+            "page": skip // limit + 1 if limit > 0 else 1,
+            "page_size": limit
+        }
+    
+    except Exception as e:
+        logger.error(f"Error fetching contacts: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch contacts"
+        )
+
+
+@router.delete("/contacts/{contact_id}")
+async def delete_contact(
+    contact_id: str,
+    current_user: dict = Depends(get_current_user_simple),
+    db: Session = Depends(get_db)
+):
+    """
+    Remove a contact from your contact list.
+    """
+    try:
+        current_uid = current_user["user_id"]
+        if isinstance(current_uid, str):
+            current_uid = int(current_uid)
+        
+        from call.repositories.contact_repository import ContactRepository
+        contact_repo = ContactRepository()
+        contact = contact_repo.get_contact(db, contact_id)
+        
+        if not contact:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Contact not found"
+            )
+        
+        # Verify ownership
+        if contact.user_id != current_uid:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Cannot delete someone else's contact"
+            )
+        
+        contact_repo.delete_contact(db, contact_id)
+        
+        logger.info(f"[CONTACT] User {current_uid} deleted contact: {contact_id}")
+        
+        return {
+            "success": True,
+            "message": "Contact deleted"
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting contact: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete contact"
+        )
+
+
+@router.put("/contacts/{contact_id}", status_code=status.HTTP_200_OK)
+async def update_contact(
+    contact_id: str,
+    update_data: ContactUpdate,
+    current_user: dict = Depends(get_current_user_simple),
+    db: Session = Depends(get_db)
+):
+    """
+    Update a contact's nickname.
+    
+    Request body:
+    {
+      "nickname": "New Nickname"
+    }
+    """
+    try:
+        if not update_data.nickname:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Nickname is required"
+            )
+        
+        current_uid = current_user["user_id"]
+        if isinstance(current_uid, str):
+            current_uid = int(current_uid)
+        
+        from call.repositories.contact_repository import ContactRepository
+        contact_repo = ContactRepository()
+        contact = contact_repo.get_contact(db, contact_id)
+        
+        if not contact:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Contact not found"
+            )
+        
+        # Verify ownership
+        if contact.user_id != current_uid:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Cannot update someone else's contact"
+            )
+        
+        updated = contact_repo.update_contact_nickname(db, contact_id, update_data.nickname)
+        
+        logger.info(f"[CONTACT] User {current_uid} updated contact: {contact_id} nickname to {updated.nickname}")
+        
+        return {
+            "success": True,
+            "message": "Contact updated",
+            "nickname": updated.nickname
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating contact: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update contact"
+        )
 
 
 @router.post("/{call_id}/add-user/{user_id}", response_model=CallResponse)

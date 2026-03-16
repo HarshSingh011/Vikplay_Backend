@@ -11,6 +11,7 @@ import auth.models as auth_models  # Auth models
 import video.models.video_models as video_models  # Video models
 import streaming.models.streaming_models as streaming_models  # Streaming models
 import call.models.call_models as call_models  # Call models
+import call.models.contact_models as contact_models  # Contact models
 
 # Load environment variables - override system env vars
 load_dotenv(override=True)
@@ -23,6 +24,7 @@ auth_models.Base.metadata.create_all(bind=engine)
 video_models.Base.metadata.create_all(bind=engine)
 streaming_models.Base.metadata.create_all(bind=engine)
 call_models.Base.metadata.create_all(bind=engine)  # Enabled for calls
+contact_models.Base.metadata.create_all(bind=engine)  # Enabled for contacts
 
 # ── Incremental column migrations ─────────────────────────────────────────────
 # create_all() never adds columns to existing tables, so we ALTER TABLE
