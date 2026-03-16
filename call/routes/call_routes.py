@@ -318,20 +318,95 @@ async def search_users_for_call(
     from auth.repositories.user_repository import user_repository
     
     if query:
-        users = user_repository.search_users(db, query, limit=20)
+        users = user_repository.search_users(db, query, skip=0, limit=200)
     else:
-        users = user_repository.get_active_users(db, limit=50)
+        # Get all users (regardless of active status) to show complete contact list
+        # This allows calling users even if they haven't logged in yet
+        users = db.query(User).limit(200).all()
     
-    # Exclude current user
-    users = [u for u in users if u.id != current_user["user_id"]]
+    # Exclude current user - handle type conversion carefully
+    current_uid = current_user["user_id"]
+    # Ensure current_uid is an integer for comparison
+    if isinstance(current_uid, str):
+        try:
+            current_uid = int(current_uid)
+        except (ValueError, TypeError):
+            current_uid = None  # Can't convert, include all users
     
-    return [{
-        "id": user.id,
-        "username": user.username,
-        "email": user.email,
-        "phone_number": user.phone_number,
-        "is_online": False  # You can implement online status tracking
-    } for user in users]
+    if current_uid is not None:
+        users = [u for u in users if u.id != current_uid]
+        logger.warning(f"[SEARCH] Excluding current user: {current_uid} (type: {type(current_uid).__name__}). Remaining users: {len(users)}")
+    else:
+        logger.warning(f"[SEARCH] Could not determine current_uid to exclude")
+    
+    # Build response with online user info from token (more accurate)
+    result = []
+    for user in users:
+        user_id_str = str(user.id)
+        is_online = call_signaling_manager.is_user_online(user_id_str)
+        
+        # If user is online, use their token info (more accurate than DB)
+        # Otherwise use database info
+        if is_online:
+            online_info = call_signaling_manager.get_user_info(user_id_str)
+            if online_info:
+                result.append({
+                    "id": user.id,
+                    "username": online_info.get("username", user.username),
+                    "email": online_info.get("email", user.email),
+                    "phone_number": user.phone_number,
+                    "is_online": True
+                })
+                continue
+        
+        # Fallback to database info
+        result.append({
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "phone_number": user.phone_number,
+            "is_online": is_online
+        })
+    
+    return result
+
+
+@router.get("/me")
+async def get_current_user(
+    current_user: dict = Depends(get_current_user_simple),
+    db: Session = Depends(get_db)
+):
+    """
+    Get current user's information including their user ID.
+    Useful for debugging and verification.
+    """
+    from auth.repositories.user_repository import user_repository
+    
+    user_id = current_user.get("user_id")
+    if isinstance(user_id, str) and user_id.isdigit():
+        user_id = int(user_id)
+    
+    # Try to get full user data from DB, but fall back to token data if not found
+    user = user_repository.get(db, user_id)
+    if user:
+        return {
+            "id": user.id,
+            "user_id": str(user.id),
+            "email": user.email,
+            "username": user.username,
+            "phone_number": user.phone_number,
+            "full_name": user.full_name
+        }
+    
+    # Fallback: return data from token (user is authenticated even if not fully in DB)
+    return {
+        "id": user_id,
+        "user_id": str(user_id),
+        "email": current_user.get("email", ""),
+        "username": current_user.get("username", "User"),
+        "phone_number": "",
+        "full_name": current_user.get("username", "Unknown")
+    }
 
 
 @router.post("/call-user/{user_id}", response_model=CallResponse, status_code=status.HTTP_201_CREATED)
@@ -345,20 +420,55 @@ async def call_user_directly(
     
     - **user_id**: The ID of the user to call
     """
-    service = CallService(db)
-    call = service.create_direct_call(current_user["user_id"], user_id)
+    # Convert user_id to integer for database operations
+    try:
+        callee_user_id = int(user_id)
+    except ValueError:
+        logger.error(f"[CALL] Invalid user_id format: {user_id}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid user ID format"
+        )
     
+    # Verify the callee exists
+    from auth.repositories.user_repository import user_repository
+    callee = user_repository.get(db, callee_user_id)
+    if not callee:
+        logger.error(f"[CALL] User not found: {callee_user_id}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    # If callee is not currently connected to the signaling server, return a clear error
+    if not call_signaling_manager.is_user_online(str(callee_user_id)):
+        logger.warning(f"[CALL] Callee {callee_user_id} is not connected. Active: {list(call_signaling_manager.active_connections.keys())}")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Callee is not connected to the signaling server"
+        )
+
+    service = CallService(db)
+    call = service.create_direct_call(str(current_user["user_id"]), str(callee_user_id))
+
     # Add caller to signaling manager so they are tracked in the call
     call_signaling_manager.add_to_call(str(call.id), str(current_user["user_id"]))
-    
+
+    # Log for debugging
+    logger.warning(f"[CALL] Initiating direct call: from={current_user['user_id']} to={callee_user_id} call_id={call.id}")
+    logger.warning(f"[CALL] Callee info: email={callee.email}, username={callee.username}")
+    logger.warning(f"[CALL] Active WebSocket connections: {list(call_signaling_manager.active_connections.keys())}")
+
     # Notify the called user via WebSocket
     await call_signaling_manager.send_call_notification(
-        to_user_id=user_id,
+        to_user_id=str(callee_user_id),  # Send to INTEGER string representation
         call_id=str(call.id),
         from_user_id=str(current_user["user_id"]),
         from_username=current_user["username"]
     )
-    
+
+    logger.warning(f"[CALL] Notification sent to user {callee_user_id}")
+
     return service._convert_to_response(call)
 
 
@@ -456,16 +566,16 @@ async def websocket_endpoint(
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
             return
         
-        logger.info(f"Token payload: {payload}")
+        logger.warning(f"[WS_AUTH] Token payload: {payload}")
         
         # Get user_id from token or lookup by email
         user_id = payload.get("user_id")
-        logger.info(f"user_id from token: {user_id}")
+        logger.warning(f"[WS_AUTH] user_id from token: {user_id}")
         
         if not user_id:
             # Token has email in 'sub', need to look up user_id
             email = payload.get("sub")
-            logger.info(f"Looking up user by email: {email}")
+            logger.warning(f"[WS_AUTH] Looking up user by email: {email}")
             if email:
                 # Get database session
                 from database import SessionLocal
@@ -474,7 +584,9 @@ async def websocket_endpoint(
                     user = user_repository.get_by_email(db, email)
                     if user:
                         user_id = user.id
-                        logger.info(f"Found user_id from database: {user_id}")
+                        logger.warning(f"[WS_AUTH] Found user_id from database: {user_id} (type: {type(user_id).__name__})")
+                    else:
+                        logger.error(f"[WS_AUTH] User not found for email: {email}")
                 finally:
                     db.close()
         
@@ -486,7 +598,7 @@ async def websocket_endpoint(
             
         # Convert to string for consistency
         user_id = str(user_id)
-        logger.info(f"User authenticated: {user_id}")
+        logger.warning(f"[WS_AUTH] ✓ User authenticated: {user_id} (type: {type(user_id).__name__})")
         
     except Exception as e:
         logger.error(f"WebSocket authentication failed: {e}", exc_info=True)
@@ -497,8 +609,31 @@ async def websocket_endpoint(
             pass
         return
     
-    # Connect user
-    await call_signaling_manager.connect(websocket, user_id)
+    # Connect user with their info from token
+    user_info = {
+        "email": payload.get("sub", ""),
+        "username": payload.get("username", ""),
+        "user_id": user_id
+    }
+    
+    # If username not in token, fetch from database
+    if not user_info.get("username"):
+        from auth.repositories.user_repository import user_repository
+        from database import SessionLocal
+        db = SessionLocal()
+        try:
+            user = user_repository.get(db, int(user_id) if isinstance(user_id, str) else user_id)
+            if user:
+                user_info["username"] = user.username
+                logger.warning(f"[WS_AUTH] Fetched username from DB: {user.username}")
+        finally:
+            db.close()
+    
+    # Fallback username if still empty
+    if not user_info.get("username"):
+        user_info["username"] = payload.get("sub", "User").split("@")[0]  # Use email prefix
+    
+    await call_signaling_manager.connect(websocket, user_id, user_info)
     
     try:
         while True:

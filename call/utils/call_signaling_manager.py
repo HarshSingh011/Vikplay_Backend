@@ -27,23 +27,30 @@ class CallSignalingManager:
         # Map of user_id -> WebSocket connection
         self.active_connections: Dict[str, WebSocket] = {}
         
+        # Map of user_id -> user info (email, username, etc)
+        self.user_info: Dict[str, dict] = {}
+        
         # Map of call_id -> set of user_ids in the call
         self.call_participants: Dict[str, Set[str]] = {}
         
         # Map of peer_id -> user_id for WebRTC peer mapping
         self.peer_to_user: Dict[str, str] = {}
 
-    async def connect(self, websocket: WebSocket, user_id: str):
+    async def connect(self, websocket: WebSocket, user_id: str, user_info: Optional[dict] = None):
         """
         Accept a WebSocket connection for a user.
         
         Args:
             websocket: WebSocket connection
             user_id: User ID
+            user_info: Optional user info (email, username, phone_number, etc)
         """
         await websocket.accept()
         self.active_connections[user_id] = websocket
-        logger.info(f"User {user_id} connected to call signaling")
+        if user_info:
+            self.user_info[user_id] = user_info
+        logger.warning(f"[WS] ✓ User {user_id} connected. Total active: {len(self.active_connections)}")
+        logger.warning(f"[WS] All connected users: {list(self.active_connections.keys())}")
 
     def disconnect(self, user_id: str):
         """
@@ -54,6 +61,9 @@ class CallSignalingManager:
         """
         if user_id in self.active_connections:
             del self.active_connections[user_id]
+        
+        if user_id in self.user_info:
+            del self.user_info[user_id]
         
         # Remove from all calls
         for call_id in list(self.call_participants.keys()):
@@ -114,13 +124,19 @@ class CallSignalingManager:
             user_id: Target user ID
             message: Message to send
         """
+        logger.warning(f"[SEND] Attempting to send {message.get('type')} to user {user_id}")
+        logger.warning(f"[SEND] Active connections keys: {list(self.active_connections.keys())}")
+        
         if user_id in self.active_connections:
             try:
                 await self.active_connections[user_id].send_json(message)
+                logger.info(f"[SEND] ✓ Message {message.get('type')} sent to user {user_id}")
             except Exception as e:
-                logger.error(f"Error sending message to user {user_id}: {e}")
+                logger.error(f"[SEND] ✗ Error sending message to user {user_id}: {e}")
                 # Connection might be broken, remove it
                 self.disconnect(user_id)
+        else:
+            logger.error(f"[SEND] ✗ User {user_id} not in active_connections. Available: {list(self.active_connections.keys())}")
 
     async def broadcast_to_call(
         self,
@@ -312,6 +328,28 @@ class CallSignalingManager:
             True if connected, False otherwise
         """
         return user_id in self.active_connections
+    
+    def set_user_info(self, user_id: str, user_info: dict):
+        """
+        Set user information (email, username, phone_number, etc).
+        
+        Args:
+            user_id: User ID
+            user_info: User information dictionary
+        """
+        self.user_info[user_id] = user_info
+    
+    def get_user_info(self, user_id: str) -> Optional[dict]:
+        """
+        Get user information for an online user.
+        
+        Args:
+            user_id: User ID
+            
+        Returns:
+            User info dict if online, None otherwise
+        """
+        return self.user_info.get(user_id)
 
 
 # Global instance
