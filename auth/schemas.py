@@ -1,11 +1,22 @@
 from pydantic import BaseModel, EmailStr, validator, Field
 from typing import Optional
 from datetime import datetime
+from auth.utils.validation_regex import (
+    validate_email_regex, 
+    validate_password_regex, 
+    validate_username_regex
+)
 
 # User Schemas
 class UserBase(BaseModel):
     username: str = Field(..., example="john_doe", description="Username (3-50 chars: letters, numbers, _, -, .)")
-    email: EmailStr = Field(..., example="john@example.com", description="Valid email address")
+    email: str = Field(..., example="john@example.com", description="Valid email address")
+    
+    @validator('email')
+    def validate_email(cls, v):
+        if not validate_email_regex(v):
+            raise ValueError('Invalid email format')
+        return v
 
 class UserCreate(UserBase):
     password: str = Field(
@@ -17,34 +28,34 @@ class UserCreate(UserBase):
     
     @validator('password')
     def validate_password(cls, v):
-        if len(v) < 8:
-            raise ValueError('Password must be at least 8 characters long')
-        if not any(c.isupper() for c in v):
-            raise ValueError('Password must contain at least one uppercase letter')
-        if not any(c.islower() for c in v):
-            raise ValueError('Password must contain at least one lowercase letter')
-        if not any(c.isdigit() for c in v):
-            raise ValueError('Password must contain at least one digit')
+        if not validate_password_regex(v):
+            raise ValueError('Password must be at least 8 characters long and contain uppercase, lowercase, and digit')
         return v
     
     @validator('username')
     def validate_username(cls, v):
-        if len(v) < 3:
-            raise ValueError('Username must be at least 3 characters long')
-        if len(v) > 50:
-            raise ValueError('Username must be less than 50 characters')
-        # Allow letters, numbers, underscore, hyphen, dot
-        import re
-        if not re.match(r'^[a-zA-Z0-9_.-]+$', v):
-            raise ValueError('Username can only contain letters, numbers, underscore, hyphen, and dot')
+        if not validate_username_regex(v):
+            raise ValueError('Username must be 3-50 characters with letters, numbers, underscore, hyphen, or dot')
         return v
 
 # Alias for backward compatibility and clarity
 UserRegister = UserCreate
 
 class UserLogin(BaseModel):
-    email: EmailStr = Field(..., example="john@example.com", description="Registered email address")
+    email: str = Field(..., example="john@example.com", description="Registered email address")
     password: str = Field(..., example="SecurePass123!", description="User password")
+    
+    @validator('email')
+    def validate_login_email(cls, v):
+        if not validate_email_regex(v):
+            raise ValueError('Invalid email or password')
+        return v
+    
+    @validator('password')
+    def validate_login_password(cls, v):
+        if not validate_password_regex(v):
+            raise ValueError('Invalid email or password')
+        return v
 
 class UserResponse(UserBase):
     id: int
@@ -57,8 +68,14 @@ class UserResponse(UserBase):
 
 # OTP Schemas
 class OTPVerify(BaseModel):
-    email: EmailStr = Field(..., example="john@example.com", description="Email address")
+    email: str = Field(..., example="john@example.com", description="Email address")
     otp: str = Field(..., example="123456", description="6-digit OTP code")
+    
+    @validator('email')
+    def validate_otp_email(cls, v):
+        if not validate_email_regex(v):
+            raise ValueError('Invalid email format')
+        return v
     
     @validator('otp')
     def validate_otp(cls, v):
@@ -69,23 +86,29 @@ class OTPVerify(BaseModel):
         return v
 
 class EmailVerify(BaseModel):
-    email: EmailStr = Field(..., example="john@example.com", description="Email address")
+    email: str = Field(..., example="john@example.com", description="Email address")
+    
+    @validator('email')
+    def validate_email_verify(cls, v):
+        if not validate_email_regex(v):
+            raise ValueError('Invalid email format')
+        return v
 
 class PasswordReset(BaseModel):
-    email: EmailStr = Field(..., example="john@example.com", description="Email address")
+    email: str = Field(..., example="john@example.com", description="Email address")
     new_password: str = Field(..., example="NewSecurePass123!", description="New password (min 8 chars, uppercase, lowercase, digit)")
     confirm_password: str = Field(..., example="NewSecurePass123!", description="Confirm new password")
     
+    @validator('email')
+    def validate_reset_email(cls, v):
+        if not validate_email_regex(v):
+            raise ValueError('Invalid email format')
+        return v
+    
     @validator('new_password')
     def validate_new_password(cls, v):
-        if len(v) < 8:
-            raise ValueError('Password must be at least 8 characters long')
-        if not any(c.isupper() for c in v):
-            raise ValueError('Password must contain at least one uppercase letter')
-        if not any(c.islower() for c in v):
-            raise ValueError('Password must contain at least one lowercase letter')
-        if not any(c.isdigit() for c in v):
-            raise ValueError('Password must contain at least one digit')
+        if not validate_password_regex(v):
+            raise ValueError('Password must be at least 8 characters long and contain uppercase, lowercase, and digit')
         return v
     
     @validator('confirm_password')
