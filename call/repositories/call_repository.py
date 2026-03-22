@@ -108,6 +108,19 @@ class CallRepository:
         status: ParticipantStatusEnum = ParticipantStatusEnum.INVITED
     ) -> CallParticipant:
         """Add a participant to a call."""
+        # Convert user_id to integer if it's a string
+        if isinstance(user_id, str):
+            try:
+                user_id = int(user_id)
+            except ValueError:
+                pass  # Leave as is, let database validation catch it
+        
+        if invited_by_user_id and isinstance(invited_by_user_id, str):
+            try:
+                invited_by_user_id = int(invited_by_user_id)
+            except ValueError:
+                pass
+        
         participant = CallParticipant(
             call_id=call_id,
             user_id=user_id,

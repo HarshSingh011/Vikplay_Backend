@@ -34,9 +34,11 @@
         .group-bar button { padding: 8px 16px; background: #00a884; border: none; border-radius: 8px; color: #fff; font-weight: 600; cursor: pointer; font-size: 13px; }
         .group-bar button:hover { background: #06cf9c; }
 
-        .user-list { flex: 1; overflow-y: auto; }
-        .user-list::-webkit-scrollbar { width: 5px; }
-        .user-list::-webkit-scrollbar-thumb { background: #3b4a54; border-radius: 3px; }
+        .user-list { flex: 1; overflow-y: auto; overflow-x: hidden; }
+        .user-list::-webkit-scrollbar { width: 8px; }
+        .user-list::-webkit-scrollbar-track { background: #1a2730; }
+        .user-list::-webkit-scrollbar-thumb { background: #2a3942; border-radius: 4px; }
+        .user-list::-webkit-scrollbar-thumb:hover { background: #3b4a54; }
 
         .user-item { display: flex; align-items: center; padding: 10px 14px; border-bottom: 1px solid rgba(42,57,66,.35); transition: background .15s; }
         .user-item:hover { background: #202c33; }
@@ -126,9 +128,11 @@
         .add-picker-close { width: 32px; height: 32px; border-radius: 50%; border: none; background: #2a3942; color: #e9edef; font-size: 16px; cursor: pointer; }
         .add-picker-search { padding: 8px 14px; border-bottom: 1px solid #2a3942; }
         .add-picker-search input { width: 100%; padding: 7px 12px; background: #202c33; border: 1px solid #3b4a54; border-radius: 8px; color: #e9edef; font-size: 13px; }
-        .add-picker-list { flex: 1; overflow-y: auto; }
-        .add-picker-list::-webkit-scrollbar { width: 5px; }
-        .add-picker-list::-webkit-scrollbar-thumb { background: #3b4a54; border-radius: 3px; }
+        .add-picker-list { flex: 1; overflow-y: auto; overflow-x: hidden; }
+        .add-picker-list::-webkit-scrollbar { width: 8px; }
+        .add-picker-list::-webkit-scrollbar-track { background: #1a2730; }
+        .add-picker-list::-webkit-scrollbar-thumb { background: #2a3942; border-radius: 4px; }
+        .add-picker-list::-webkit-scrollbar-thumb:hover { background: #3b4a54; }
         .add-item { display: flex; align-items: center; padding: 10px 14px; border-bottom: 1px solid rgba(42,57,66,.35); cursor: pointer; transition: background .15s; }
         .add-item:hover { background: #202c33; }
         .add-item .user-avatar { width: 38px; height: 38px; font-size: 15px; }
@@ -137,6 +141,44 @@
         .add-item .add-btn:hover { background: #06cf9c; }
         .add-item .add-btn:disabled { background: #3b4a54; cursor: not-allowed; }
         .ctrl-btn.add { background: #2a3942; color: #fff; }
+
+        /* ── Debug Logs Panel ── */
+        .debug-panel { position: fixed; bottom: 0; right: 0; width: 400px; max-height: 50vh; background: #111b21; border: 1px solid #2a3942; border-radius: 8px 8px 0 0; display: flex; flex-direction: column; z-index: 1000; box-shadow: 0 -4px 12px rgba(0,0,0,.5); }
+        .debug-panel.collapsed { max-height: 40px; }
+        .debug-header { background: #202c33; padding: 10px 14px; border-bottom: 1px solid #2a3942; display: flex; align-items: center; justify-content: space-between; cursor: pointer; }
+        .debug-header h4 { font-size: 12px; font-weight: 600; margin: 0; }
+        .debug-header-controls { display: flex; gap: 6px; }
+        .debug-btn { padding: 4px 8px; background: #2a3942; border: none; border-radius: 4px; color: #e9edef; font-size: 11px; cursor: pointer; font-weight: 600; }
+        .debug-btn:hover { background: #3b4a54; }
+        .debug-logs { flex: 1; overflow-y: auto; font-family: 'Courier New', monospace; font-size: 11px; padding: 8px; }
+        .debug-logs::-webkit-scrollbar { width: 6px; }
+        .debug-logs::-webkit-scrollbar-thumb { background: #3b4a54; border-radius: 3px; }
+        .log-entry { padding: 4px 6px; margin-bottom: 2px; border-radius: 3px; line-height: 1.3; }
+        .log-entry.ws { background: rgba(0, 168, 132, 0.1); color: #00a884; border-left: 3px solid #00a884; }
+        .log-entry.api { background: rgba(102, 126, 234, 0.1); color: #6671f2; border-left: 3px solid #6671f2; }
+        .log-entry.error { background: rgba(234, 67, 53, 0.1); color: #ea4335; border-left: 3px solid #ea4335; }
+        .log-entry.info { background: rgba(168, 169, 175, 0.1); color: #a8a9af; border-left: 3px solid #a8a9af; }
+        .log-timestamp { color: #8696a0; font-size: 10px; }
+
+        /* ── Tabs ── */
+        .tabs { display: flex; background: #202c33; border-bottom: 1px solid #2a3942; }
+        .tab-btn { flex: 1; padding: 10px; border: none; background: transparent; color: #8696a0; font-size: 12px; font-weight: 600; cursor: pointer; border-bottom: 2px solid transparent; transition: all .2s; }
+        .tab-btn:hover { color: #e9edef; }
+        .tab-btn.active { color: #00a884; border-bottom-color: #00a884; }
+        
+        /* ── Contact sections ── */
+        .tab-content { display: none; flex: 1; flex-direction: column; overflow: hidden; }
+        .tab-content.active { display: flex; }
+        
+        /* Add contact form */
+        .add-contact-form { padding: 14px; display: flex; flex-direction: column; gap: 10px; background: #202c33; border-bottom: 1px solid #2a3942; }
+        .form-group { display: flex; flex-direction: column; gap: 5px; }
+        .form-group label { font-size: 11px; color: #8696a0; font-weight: 600; }
+        .form-group input { padding: 8px 10px; background: #2a3942; border: 1px solid #3b4a54; border-radius: 6px; color: #e9edef; font-size: 12px; }
+        .form-group input::placeholder { color: #8696a0; }
+        .btn-add-contact { padding: 8px; background: #00a884; border: none; border-radius: 6px; color: #fff; font-weight: 600; cursor: pointer; font-size: 12px; }
+        .btn-add-contact:hover { background: #06cf9c; }
+        .btn-add-contact:disabled { background: #3b4a54; cursor: not-allowed; }
     </style>
 </head>
 <body>
@@ -149,14 +191,46 @@
             <button class="btn-primary" id="connectBtn" onclick="connect()">Connect</button>
             <div class="conn-status" id="connStatus"></div>
         </div>
-        <div class="search-box">
-            <input type="text" class="search-input" id="searchInput" placeholder="Search users..." oninput="debouncedSearch()">
+
+        <!-- Tab Navigation -->
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab('search')">🔍 Search</button>
+            <button class="tab-btn" onclick="switchTab('add-contact')">➕ Add Contact</button>
+            <button class="tab-btn" onclick="switchTab('contacts')">📋 Contacts</button>
         </div>
-        <div class="group-bar" id="groupBar">
-            <span id="selectedCount">0 selected</span>
-            <button onclick="startGroupCall()">Group Call</button>
+
+        <!-- Search Tab -->
+        <div id="search" class="tab-content active">
+            <div class="search-box">
+                <input type="text" class="search-input" id="searchInput" placeholder="Search users..." oninput="debouncedSearch()">
+            </div>
+            <div class="group-bar" id="groupBar">
+                <span id="selectedCount">0 selected</span>
+                <button onclick="startGroupCall()">Group Call</button>
+            </div>
+            <div class="user-list" id="userList"><div class="empty-msg">Connect to see users</div></div>
         </div>
-        <div class="user-list" id="userList"><div class="empty-msg">Connect to see users</div></div>
+
+        <!-- Add Contact Tab -->
+        <div id="add-contact" class="tab-content">
+            <div class="add-contact-form">
+                <div class="form-group">
+                    <label>Email Address</label>
+                    <input type="email" id="addContactEmail" placeholder="user@example.com">
+                </div>
+                <div class="form-group">
+                    <label>Nickname</label>
+                    <input type="text" id="addContactNickname" placeholder="e.g., John, Mom, Work">
+                </div>
+                <button class="btn-add-contact" onclick="addContactFromForm()">Add Contact</button>
+            </div>
+            <div class="user-list" id="addContactStatus"><div class="empty-msg">Enter email and nickname above to add a contact</div></div>
+        </div>
+
+        <!-- Contacts Tab -->
+        <div id="contacts" class="tab-content">
+            <div class="user-list" id="contactsList"><div class="empty-msg">No contacts yet. Add one from the "Add Contact" tab!</div></div>
+        </div>
     </div>
 
     <!-- Main -->
@@ -228,6 +302,18 @@
     </div>
 </div>
 
+<!-- Debug Logs Panel -->
+<div class="debug-panel collapsed" id="debugPanel">
+    <div class="debug-header" onclick="toggleDebugPanel()">
+        <h4>📊 Logs</h4>
+        <div class="debug-header-controls">
+            <button class="debug-btn" onclick="clearDebugLogs(event)">Clear</button>
+            <button class="debug-btn" onclick="toggleDebugPanel(event)">−</button>
+        </div>
+    </div>
+    <div class="debug-logs" id="debugLogs"></div>
+</div>
+
 <script>
 /* ═══════════ STATE ═══════════ */
 let ws = null;
@@ -254,6 +340,73 @@ const RTC_CONFIG = {
     ]
 };
 
+/* ═══════════ DEBUG & LOGGING ═══════════ */
+let logBuffer = [];
+const MAX_LOGS = 500;
+
+function addLog(type, message, data = null) {
+    const timestamp = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const entry = { timestamp, type, message, data };
+    logBuffer.push(entry);
+    if (logBuffer.length > MAX_LOGS) logBuffer.shift();
+    
+    const logsEl = document.getElementById('debugLogs');
+    if (logsEl) {
+        const logDiv = document.createElement('div');
+        logDiv.className = `log-entry ${type}`;
+        let content = `<span class="log-timestamp">${timestamp}</span> ${message}`;
+        if (data) content += ` <strong>${typeof data === 'string' ? data : JSON.stringify(data).substring(0, 100)}</strong>`;
+        logDiv.innerHTML = content;
+        logsEl.appendChild(logDiv);
+        logsEl.scrollTop = logsEl.scrollHeight;
+    }
+}
+
+function toggleDebugPanel(e) {
+    if (e) e.stopPropagation();
+    const panel = document.getElementById('debugPanel');
+    panel.classList.toggle('collapsed');
+}
+
+function clearDebugLogs(e) {
+    if (e) e.stopPropagation();
+    logBuffer = [];
+    const logsEl = document.getElementById('debugLogs');
+    if (logsEl) logsEl.innerHTML = '';
+    addLog('info', '✓ Logs cleared');
+}
+
+// Hook console.log
+const originalConsoleLog = console.log;
+const originalConsoleError = console.error;
+console.log = function(...args) {
+    originalConsoleLog.apply(console, args);
+    addLog('info', args.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' '));
+};
+console.error = function(...args) {
+    originalConsoleError.apply(console, args);
+    addLog('error', '❌ ' + args.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' '));
+};
+
+// Hook fetch
+const originalFetch = window.fetch;
+window.fetch = function(...args) {
+    const [resource, config] = args;
+    const method = (config?.method || 'GET').toUpperCase();
+    const url = typeof resource === 'string' ? resource : resource.url;
+    addLog('api', `${method} ${url.split('?')[0]}`, config?.body ? JSON.parse(config.body) : '');
+    
+    return originalFetch.apply(this, args).then(response => {
+        const status = response.status;
+        const statusType = status >= 200 && status < 300 ? 'info' : status >= 400 ? 'error' : 'api';
+        addLog(statusType, `↩ ${status} ${url.split('?')[0]}`);
+        return response;
+    }).catch(err => {
+        addLog('error', `✗ ${method} ${url}`, err.message);
+        throw err;
+    });
+};
+
 /* ═══════════ CONNECT ═══════════ */
 async function connect() {
     const token = document.getElementById('jwtToken').value.trim();
@@ -261,30 +414,51 @@ async function connect() {
     const btn = document.getElementById('connectBtn');
     btn.disabled = true;
     setStatus('Connecting...');
+    addLog('info', '🔌 Attempting WebSocket connection...');
 
     try {
         const payload = JSON.parse(atob(token.split('.')[1]));
         currentUser = { id: String(payload.user_id || payload.sub), sub: payload.sub };
 
         if (ws) { ws.onclose = null; ws.close(); }
-        // Production WebSocket URL - change to ws://localhost:8000 for local development
-        ws = new WebSocket(`wss://vikplay-backend.onrender.com/calls/ws?token=${encodeURIComponent(token)}`);
+        // Using local WebSocket URL for local development
+        ws = new WebSocket(`ws://localhost:8000/calls/ws?token=${encodeURIComponent(token)}`);
 
         ws.onopen = () => {
+            addLog('ws', '✅ WebSocket connected', `User: ${payload.sub}`);
+            addLog('ws', `👤 Your User ID: ${currentUser.id}`, `Email: ${payload.sub}`);
             setStatus('Connected as ' + payload.sub, true);
             document.getElementById('wsDot').classList.add('on');
             document.getElementById('wsLabel').textContent = 'Connected';
             loadUsers(token);
         };
-        ws.onmessage = e => { try { handleWsMessage(JSON.parse(e.data)); } catch (err) { console.error('WS parse', err); } };
-        ws.onerror = () => { setStatus('Connection error', false); btn.disabled = false; };
+        ws.onmessage = e => { 
+            try { 
+                const msg = JSON.parse(e.data);
+                addLog('ws', `📩 ${msg.type || 'MESSAGE'}`, msg.data ? Object.keys(msg.data).slice(0, 3).join(', ') : '');
+                handleWsMessage(msg); 
+            } catch (err) { 
+                console.error('WS parse', err);
+                addLog('error', '❌ WebSocket parse error', err.message);
+            } 
+        };
+        ws.onerror = () => { 
+            addLog('error', '❌ WebSocket error');
+            setStatus('Connection error', false); 
+            btn.disabled = false; 
+        };
         ws.onclose = e => {
+            addLog('ws', `⛔ WebSocket closed (code: ${e.code})`);
             setStatus('Disconnected (' + e.code + ')', false);
             document.getElementById('wsDot').classList.remove('on');
             document.getElementById('wsLabel').textContent = 'Disconnected';
             btn.disabled = false;
         };
-    } catch (err) { setStatus('Error: ' + err.message, false); btn.disabled = false; }
+    } catch (err) { 
+        addLog('error', '❌ Connection error', err.message);
+        setStatus('Error: ' + err.message, false); 
+        btn.disabled = false; 
+    }
 }
 
 function setStatus(msg, ok) {
@@ -299,37 +473,61 @@ let allUsers = [];
 async function loadUsers(token) {
     document.getElementById('userList').innerHTML = '<div class="empty-msg">Loading...</div>';
     try {
+        // First, get current user info for debugging
+        const meResp = await fetch('/calls/me', { headers: { Authorization: 'Bearer ' + token } });
+        if (meResp.ok) {
+            const meData = await meResp.json();
+            addLog('info', `👤 Your ID: ${meData.id}`, `Email: ${meData.email}`);
+        }
+        
+        // Then load user list
         const r = await fetch('/calls/users/search', { headers: { Authorization: 'Bearer ' + token } });
         if (!r.ok) throw new Error('HTTP ' + r.status);
         allUsers = await r.json();
         renderUsers(allUsers);
-    } catch { document.getElementById('userList').innerHTML = '<div class="empty-msg">Failed to load</div>'; }
+    } catch { 
+        addLog('error', '❌ Failed to load users');
+        document.getElementById('userList').innerHTML = '<div class="empty-msg">Failed to load</div>'; 
+    }
 }
 
 function renderUsers(users) {
     const list = document.getElementById('userList');
     if (!users.length) { list.innerHTML = '<div class="empty-msg">No users found</div>'; return; }
     const frag = document.createDocumentFragment();
-    users.slice(0, 40).forEach(u => {
+    // Render ALL users (no slicing)
+    users.forEach(u => {
         const d = document.createElement('div');
         d.className = 'user-item';
         const cb = document.createElement('input');
         cb.type = 'checkbox'; cb.className = 'user-cb';
         cb.checked = !!selectedUsers[u.id];
-        cb.addEventListener('change', () => toggleSelect(u.id, u.username, cb.checked));
+        cb.disabled = !u.is_online; // Disable checkbox if offline
+        cb.addEventListener('change', () => { if (u.is_online) toggleSelect(u.id, u.username, cb.checked); else cb.checked = false; });
 
         d.innerHTML = `
-            <div class="user-avatar">${esc((u.username||'?')[0].toUpperCase())}</div>
+            <div class="user-avatar" style="position: relative;">
+                ${esc((u.username||'?')[0].toUpperCase())}
+                <span style="position: absolute; bottom: 0; right: 0; width: 10px; height: 10px; border-radius: 50%; background: ${u.is_online ? '#00a884' : '#999'}; border: 1px solid #0b141a;"></span>
+            </div>
             <div class="user-info">
-                <div class="user-name">${esc(u.username)}</div>
+                <div class="user-name">${esc(u.username)} ${u.is_online ? '🟢' : '⚪'}</div>
                 <div class="user-sub">${esc(u.email || u.phone_number || '')}</div>
             </div>`;
         d.prepend(cb);
 
         const btn = document.createElement('button');
-        btn.className = 'call-icon-btn'; btn.textContent = '📞';
-        btn.title = 'Direct call';
-        btn.addEventListener('click', e => { e.stopPropagation(); callUser(String(u.id), u.username); });
+        btn.className = 'call-icon-btn'; 
+        btn.textContent = '📞';
+        btn.title = u.is_online ? 'Direct call' : 'User offline';
+        btn.disabled = !u.is_online; // Disable call button if offline
+        btn.style.opacity = u.is_online ? '1' : '0.4';
+        btn.style.cursor = u.is_online ? 'pointer' : 'not-allowed';
+        btn.addEventListener('click', e => { 
+            e.stopPropagation(); 
+            if (u.is_online) callUser(String(u.id), u.username);
+            else alert('User is offline');
+        });
         d.appendChild(btn);
         frag.appendChild(d);
     });
@@ -361,10 +559,17 @@ function debouncedSearch() {
 
 /* ═══════════ OUTGOING: DIRECT CALL ═══════════ */
 async function callUser(userId, username) {
-    if (!ws || ws.readyState !== WebSocket.OPEN) return alert('Connect first');
-    if (currentCallId) return alert('Already in a call');
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+        addLog('error', '❌ WebSocket not connected');
+        return alert('Connect first');
+    }
+    if (currentCallId) {
+        addLog('error', '❌ Already in a call');
+        return alert('Already in a call');
+    }
 
     participantNames[userId] = username;
+    addLog('info', `📞 Calling user: ${username} (${userId})`);
     showOutgoing(username, false);
 
     const token = document.getElementById('jwtToken').value.trim();
@@ -375,9 +580,14 @@ async function callUser(userId, username) {
         if (!r.ok) throw new Error('HTTP ' + r.status);
         const data = await r.json();
         currentCallId = data.id;
+        addLog('info', `✓ Call initiated (ID: ${data.id})`);
         await startLocalMedia();
         addVideoTile('local', 'You', localStream, true);
-    } catch (err) { alert('Call failed: ' + err.message); resetCallState(); }
+    } catch (err) { 
+        addLog('error', '❌ Call failed', err.message);
+        alert('Call failed: ' + err.message); 
+        resetCallState(); 
+    }
 }
 
 /* ═══════════ OUTGOING: GROUP CALL ═══════════ */
@@ -408,9 +618,13 @@ async function startGroupCall() {
 
 /* ═══════════ INCOMING CALL ═══════════ */
 function handleIncomingCall(data) {
-    if (currentCallId) return; // busy
+    if (currentCallId) {
+        addLog('info', '❌ Already in a call, rejecting incoming call');
+        return;
+    }
     incomingCallData = data;
     const name = data.from_username || 'Unknown';
+    addLog('info', `📭 INCOMING CALL from ${name} (user_id: ${data.from_user_id})`);
     document.getElementById('incCaller').textContent = name;
     document.getElementById('incAvatar').textContent = name[0].toUpperCase();
     document.getElementById('incLabel').textContent = data.is_group_call
@@ -462,6 +676,7 @@ async function startLocalMedia() {
 function createPeerConnectionFor(userId) {
     if (peerConnections[userId]) return peerConnections[userId];
 
+    addLog('info', `🔗 Creating peer connection for ${userId}`);
     const pc = new RTCPeerConnection(RTC_CONFIG);
     peerConnections[userId] = pc;
     iceCandidateQueues[userId] = iceCandidateQueues[userId] || [];
@@ -473,6 +688,7 @@ function createPeerConnectionFor(userId) {
     };
 
     pc.ontrack = e => {
+        addLog('info', `📹 Remote video track received from ${userId}`);
         remoteStreams[userId] = e.streams[0];
         addVideoTile(userId, participantNames[userId] || 'User', e.streams[0], false);
         showVideoGrid();
@@ -481,7 +697,7 @@ function createPeerConnectionFor(userId) {
 
     pc.oniceconnectionstatechange = () => {
         const s = pc.iceConnectionState;
-        console.log(`[ICE ${userId}]`, s);
+        addLog('info', `❄️ ICE connection state (${userId}): ${s}`);
         if (s === 'connected' || s === 'completed') startCallTimerOnce();
         else if (s === 'failed') removeParticipant(userId);
     };
@@ -491,7 +707,7 @@ function createPeerConnectionFor(userId) {
 
 /* ═══════════ OFFER / ANSWER / ICE ═══════════ */
 async function createOfferToUser(userId) {
-    console.log('[OFFER] Creating offer to', userId);
+    addLog('info', `📤 Creating WebRTC offer for ${userId}`);
     if (!localStream) await startLocalMedia();
     const pc = createPeerConnectionFor(userId);
 
@@ -502,16 +718,15 @@ async function createOfferToUser(userId) {
 
 async function handleOffer(msg) {
     const fromUser = String(msg.from_user_id);
-    if (!currentCallId) { pendingOffers.push(msg); return; }
+    if (!currentCallId) { pendingOffers.push(msg); addLog('info', `⏳ Queuing offer from ${fromUser} (call not accepted yet)`); return; }
 
-    console.log('[OFFER] Received from', fromUser);
+    addLog('info', `👂 Handling WebRTC offer from ${fromUser}`);
     if (!localStream) await startLocalMedia();
 
     const pc = createPeerConnectionFor(fromUser);
     const offerDesc = msg.data.offer || msg.data;
     await pc.setRemoteDescription(new RTCSessionDescription(offerDesc));
 
-    // Flush queued ICE
     await flushIceCandidates(fromUser);
 
     const answer = await pc.createAnswer();
@@ -521,8 +736,9 @@ async function handleOffer(msg) {
 
 async function handleAnswer(msg) {
     const fromUser = String(msg.from_user_id);
+    addLog('info', `👂 Handling WebRTC answer from ${fromUser}`);
     const pc = peerConnections[fromUser];
-    if (!pc) return;
+    if (!pc) { addLog('error', `❌ No peer connection for ${fromUser}`); return; }
 
     const answerDesc = msg.data.answer || msg.data;
     await pc.setRemoteDescription(new RTCSessionDescription(answerDesc));
@@ -550,6 +766,7 @@ async function flushIceCandidates(userId) {
     const pc = peerConnections[userId];
     if (!pc || !pc.remoteDescription) return;
 
+    addLog('info', `❄️ Flushing ${queue.length} ICE candidates for ${userId}`);
     for (const c of queue) {
         try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch (e) {}
     }
@@ -711,12 +928,12 @@ function showVideoGrid() {
 /* ═══════════ WEBSOCKET ROUTER ═══════════ */
 function handleWsMessage(msg) {
     const type = (msg.type || '').toUpperCase();
-    console.log('[WS]', type);
 
     switch (type) {
         case 'INCOMING_CALL':
         case 'CALL_INITIATED':
             if (msg.data?.caller_info) {
+                addLog('info', `📭 Incoming call from ${msg.data.caller_info.full_name || msg.data.caller_info.username}`);
                 handleIncomingCall({
                     call_id: msg.data.call_id,
                     from_user_id: msg.data.caller_info.user_id,
@@ -730,52 +947,65 @@ function handleWsMessage(msg) {
             break;
 
         case 'CALL_ACCEPTED':
-            // Someone accepted our call (or the outgoing call in general)
+            addLog('info', '✅ Call accepted!');
             document.getElementById('outState').textContent = 'Accepted! Connecting...';
             break;
 
         case 'PARTICIPANT_JOINED':
-            // Someone joined the call → create offer to them
             {
                 const newUid = String(msg.data.user_id);
-                console.log('[PARTICIPANT_JOINED]', newUid);
+                addLog('info', `👤 Participant joined (${newUid})`);
                 if (newUid !== currentUser?.id) {
-                    showVideoGrid(); // switch from outgoing overlay to grid
+                    showVideoGrid();
                     createOfferToUser(newUid).catch(e => console.error('offer error', e));
                 }
             }
             break;
 
         case 'PARTICIPANT_LEFT':
-            // Someone left the call → close their connection
+            addLog('info', `👤 Participant left (${msg.data.user_id})`);
             removeParticipant(String(msg.data.user_id));
             break;
 
         case 'CALL_DECLINED':
+            addLog('info', '❌ Call was declined');
             alert('Call was declined');
-            // In group call, don't end everything
             break;
 
         case 'WEBRTC_OFFER':
+            addLog('info', `🤝 WebRTC Offer received from ${msg.from_user_id}`);
             handleOffer(msg).catch(e => console.error('offer err', e));
             break;
 
         case 'WEBRTC_ANSWER':
+            addLog('info', `🤝 WebRTC Answer received from ${msg.from_user_id}`);
             handleAnswer(msg).catch(e => console.error('answer err', e));
             break;
 
         case 'WEBRTC_ICE_CANDIDATE':
+            addLog('info', `❄️ ICE Candidate received from ${msg.from_user_id}`);
             handleIceCandidate(msg).catch(e => console.error('ice err', e));
             break;
 
         case 'CALL_ENDED':
+            addLog('info', '📴 Call ended');
             resetCallState();
             break;
+
+        default:
+            addLog('info', `📩 Unknown message type: ${type}`);
     }
 }
 
 /* ═══════════ UTILS ═══════════ */
-function wsSend(obj) { if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj)); }
+function wsSend(obj) { 
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        addLog('ws', `📤 ${obj.type || 'MESSAGE'}`, obj.data ? Object.keys(obj.data).slice(0, 3).join(', ') : '');
+        ws.send(JSON.stringify(obj)); 
+    } else {
+        addLog('error', '❌ WebSocket not ready to send');
+    }
+}
 function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
 
 /* ═══════════ ADD PERSON MID-CALL ═══════════ */
@@ -808,22 +1038,26 @@ function renderPickerList(users) {
     if (currentUser) inCall.add(currentUser.id);
 
     const frag = document.createDocumentFragment();
-    users.slice(0, 30).forEach(u => {
+    // Render ALL users (no slicing)
+    users.forEach(u => {
         const uid = String(u.id);
         const already = inCall.has(uid);
+        const isOnline = u.is_online;
         const d = document.createElement('div');
         d.className = 'add-item';
         d.innerHTML = `
             <div class="user-avatar">${esc((u.username||'?')[0].toUpperCase())}</div>
             <div class="user-info">
-                <div class="user-name">${esc(u.username)}</div>
+                <div class="user-name">${esc(u.username)} ${isOnline ? '🟢' : '⚪'}</div>
                 <div class="user-sub">${esc(u.email || u.phone_number || '')}</div>
             </div>`;
         const btn = document.createElement('button');
         btn.className = 'add-btn';
-        btn.textContent = already ? 'In call' : 'Add';
-        btn.disabled = already;
-        if (!already) btn.addEventListener('click', () => addPersonToCall(uid, u.username, btn));
+        let btnDisabled = already || !isOnline;
+        btn.textContent = already ? 'In call' : isOnline ? 'Add' : 'Offline';
+        btn.disabled = btnDisabled;
+        btn.style.opacity = btnDisabled ? '0.5' : '1';
+        if (!already && isOnline) btn.addEventListener('click', () => addPersonToCall(uid, u.username, btn));
         d.appendChild(btn);
         frag.appendChild(d);
     });
@@ -849,6 +1083,214 @@ async function addPersonToCall(userId, username, btn) {
     } catch (err) {
         alert('Could not add: ' + err.message);
         btn.disabled = false; btn.textContent = 'Add';
+    }
+}
+
+/* ═══════════ TAB SWITCHING ═══════════ */
+function switchTab(tabName) {
+    // Hide all tabs
+    document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+    
+    // Show selected tab
+    const tabEl = document.getElementById(tabName);
+    if (tabEl) {
+        tabEl.classList.add('active');
+        addLog('info', `📑 Switched to ${tabName}`);
+    }
+    
+    // Activate corresponding button
+    const tabBtn = document.querySelector(`[onclick="switchTab('${tabName}')"]`);
+    if (tabBtn) {
+        tabBtn.classList.add('active');
+    }
+    
+    // Load contacts if switching to contacts tab
+    if (tabName === 'contacts') {
+        loadContactsList();
+    }
+}
+
+/* ═══════════ CONTACT MANAGEMENT ═══════════ */
+let contactsList = [];
+
+async function addContactFromForm() {
+    const email = document.getElementById('addContactEmail').value.trim();
+    const nickname = document.getElementById('addContactNickname').value.trim();
+    const token = document.getElementById('jwtToken').value.trim();
+    
+    if (!email || !nickname) {
+        alert('Please fill in both email and nickname');
+        return;
+    }
+    
+    if (!token) {
+        alert('Connect first to add contacts');
+        return;
+    }
+    
+    const btn = event.target;
+    btn.disabled = true;
+    btn.textContent = 'Adding...';
+    
+    try {
+        const r = await fetch('/calls/contacts/add', {
+            method: 'POST',
+            headers: { 
+                Authorization: 'Bearer ' + token, 
+                'Content-Type': 'application/json' 
+            },
+            body: JSON.stringify({ email, nickname })
+        });
+        
+        if (!r.ok) {
+            const err = await r.json();
+            throw new Error(err.detail || `HTTP ${r.status}`);
+        }
+        
+        const data = await r.json();
+        addLog('info', `✅ Contact added: ${nickname}`, email);
+        
+        // Clear form
+        document.getElementById('addContactEmail').value = '';
+        document.getElementById('addContactNickname').value = '';
+        
+        // Update status
+        document.getElementById('addContactStatus').innerHTML = `
+            <div style="padding: 20px; text-align: center; color: #00a884;">
+                ✅ ${nickname} added to your contacts!
+            </div>
+        `;
+        
+        // Reload contacts
+        setTimeout(() => loadContactsList(), 500);
+        
+        setTimeout(() => {
+            document.getElementById('addContactStatus').innerHTML = '<div class="empty-msg">Enter email and nickname above to add a contact</div>';
+        }, 3000);
+        
+    } catch (err) {
+        addLog('error', '❌ Failed to add contact', err.message);
+        alert('Error: ' + err.message);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Add Contact';
+    }
+}
+
+async function loadContactsList() {
+    const token = document.getElementById('jwtToken').value.trim();
+    if (!token) {
+        document.getElementById('contactsList').innerHTML = '<div class="empty-msg">Connect first to view contacts</div>';
+        return;
+    }
+    
+    try {
+        const r = await fetch('/calls/contacts', {
+            headers: { Authorization: 'Bearer ' + token }
+        });
+        
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        
+        const data = await r.json();
+        contactsList = data.contacts || [];
+        renderContactsList();
+        
+    } catch (err) {
+        addLog('error', '❌ Failed to load contacts', err.message);
+        document.getElementById('contactsList').innerHTML = '<div class="empty-msg">Failed to load contacts</div>';
+    }
+}
+
+function renderContactsList() {
+    const list = document.getElementById('contactsList');
+    
+    if (!contactsList.length) {
+        list.innerHTML = '<div class="empty-msg">No contacts yet. Add one from the "Add Contact" tab!</div>';
+        return;
+    }
+    
+    const frag = document.createDocumentFragment();
+    contactsList.forEach(contact => {
+        const d = document.createElement('div');
+        d.className = 'user-item';
+        
+        const avatar = document.createElement('div');
+        avatar.className = 'user-avatar';
+        avatar.style.position = 'relative';
+        avatar.innerHTML = `
+            ${esc((contact.nickname||'?')[0].toUpperCase())}
+            <span style="position: absolute; bottom: 0; right: 0; width: 10px; height: 10px; border-radius: 50%; background: ${contact.is_online ? '#00a884' : '#999'}; border: 1px solid #0b141a;"></span>
+        `;
+        d.appendChild(avatar);
+        
+        d.innerHTML += `
+            <div class="user-info">
+                <div class="user-name">${esc(contact.nickname)} ${contact.is_online ? '🟢' : '⚪'}</div>
+                <div class="user-sub">${esc(contact.email)}</div>
+            </div>`;
+        
+        const btn = document.createElement('button');
+        btn.className = 'call-icon-btn';
+        btn.textContent = '📞';
+        btn.title = contact.is_online ? 'Call' : 'User offline';
+        btn.disabled = !contact.is_online;
+        btn.style.opacity = contact.is_online ? '1' : '0.4';
+        btn.style.cursor = contact.is_online ? 'pointer' : 'not-allowed';
+        
+        btn.addEventListener('click', e => {
+            e.stopPropagation();
+            if (contact.is_online) {
+                callUser(String(contact.contact_user_id), contact.nickname);
+            } else {
+                alert('User is offline');
+            }
+        });
+        
+        d.appendChild(btn);
+        
+        // Delete button
+        const delBtn = document.createElement('button');
+        delBtn.className = 'call-icon-btn';
+        delBtn.textContent = '❌';
+        delBtn.title = 'Remove contact';
+        delBtn.style.background = '#ea4335';
+        delBtn.style.width = '32px';
+        delBtn.style.height = '32px';
+        delBtn.style.fontSize = '14px';
+        delBtn.addEventListener('click', e => {
+            e.stopPropagation();
+            deleteContact(contact.id, contact.nickname);
+        });
+        d.appendChild(delBtn);
+        
+        frag.appendChild(d);
+    });
+    
+    list.innerHTML = '';
+    list.appendChild(frag);
+}
+
+async function deleteContact(contactId, nickname) {
+    if (!confirm(`Delete ${nickname} from contacts?`)) return;
+    
+    const token = document.getElementById('jwtToken').value.trim();
+    if (!token) return;
+    
+    try {
+        const r = await fetch(`/calls/contacts/${contactId}`, {
+            method: 'DELETE',
+            headers: { Authorization: 'Bearer ' + token }
+        });
+        
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        
+        addLog('info', `❌ Contact deleted: ${nickname}`);
+        loadContactsList();
+        
+    } catch (err) {
+        addLog('error', '❌ Failed to delete contact', err.message);
+        alert('Error deleting contact: ' + err.message);
     }
 }
 

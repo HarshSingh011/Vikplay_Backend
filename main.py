@@ -2,7 +2,8 @@ import logging
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.exceptions import RequestValidationError
 from database import engine
 import os
 
@@ -11,6 +12,7 @@ import auth.models as auth_models  # Auth models
 import video.models.video_models as video_models  # Video models
 import streaming.models.streaming_models as streaming_models  # Streaming models
 import call.models.call_models as call_models  # Call models
+import call.models.contact_models as contact_models  # Contact models
 
 # Load environment variables - override system env vars
 load_dotenv(override=True)
@@ -23,6 +25,7 @@ auth_models.Base.metadata.create_all(bind=engine)
 video_models.Base.metadata.create_all(bind=engine)
 streaming_models.Base.metadata.create_all(bind=engine)
 call_models.Base.metadata.create_all(bind=engine)  # Enabled for calls
+contact_models.Base.metadata.create_all(bind=engine)  # Enabled for contacts
 
 # ── Incremental column migrations ─────────────────────────────────────────────
 # create_all() never adds columns to existing tables, so we ALTER TABLE
@@ -62,6 +65,28 @@ except Exception as _e:
 # ──────────────────────────────────────────────────────────────────────────────
 
 app = FastAPI(title="Video Server API", version="1.0.1")
+
+# Custom exception handler for validation errors
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request, exc):
+    """
+    Custom handler for validation errors.
+    Returns simple error message format: {"detail": "error message"}
+    """
+    # Extract the first error message from validation errors
+    if exc.errors():
+        error_msg = exc.errors()[0].get('msg', 'Validation error')
+        # Extract just the error message without the "Value error, " prefix if present
+        if error_msg.startswith('Value error, '):
+            error_msg = error_msg.replace('Value error, ', '')
+        return JSONResponse(
+            status_code=422,
+            content={"detail": error_msg}
+        )
+    return JSONResponse(
+        status_code=422,
+        content={"detail": "Validation error"}
+    )
 
 app.add_middleware(
     CORSMiddleware,

@@ -326,7 +326,7 @@
             
             <div id="viewStatus" class="status offline">⚫ Not Watching</div>
             
-            <video id="remoteVideo" autoplay playsinline controls></video>
+            <video id="remoteVideo" autoplay playsinline controls muted></video>
 
             <!-- Delay / Go-to-Live bar -->
             <div class="delay-bar" id="delayBar">
@@ -379,6 +379,9 @@
         let viewerId = null;
         let lastBroadcasterTs = 0;
         let currentDelay = 0;
+        // ICE candidate buffering — hold candidates until setRemoteDescription completes
+        let pendingIceCandidates = [];
+        let remoteDescSet = false;
 
         // ── Discovery: Live streams & search ────────────────────────
 
@@ -458,12 +461,28 @@
             });
         });
         
-        const rtcConfig = {
+        let rtcConfig = {
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
                 { urls: 'stun:stun1.l.google.com:19302' }
             ]
         };
+
+        // Fetch ICE servers (STUN + TURN) from backend once on load
+        (async () => {
+            try {
+                const res = await fetch(`${API_URL}/api/webrtc/ice-servers`);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.ice_servers && data.ice_servers.length) {
+                        rtcConfig = { iceServers: data.ice_servers };
+                        log(`✅ ICE config loaded (TURN available: ${data.turn_available})`, 'success');
+                    }
+                }
+            } catch (e) {
+                log('⚠️ Could not fetch ICE servers from backend, using default STUN only.');
+            }
+        })();
         
         function log(msg, type = 'info') {
             const logDiv = document.getElementById('log');
@@ -640,18 +659,38 @@
         }
         
         async function createPeerConnection() {
+            // Reset ICE buffering state for fresh connection
+            pendingIceCandidates = [];
+            remoteDescSet = false;
+
             peerConnection = new RTCPeerConnection(rtcConfig);
             
             // Handle remote stream
             peerConnection.ontrack = (event) => {
                 log('📺 Receiving stream!', 'success');
                 const remoteVideo = document.getElementById('remoteVideo');
-                
-                if (remoteVideo.srcObject !== event.streams[0]) {
-                    remoteVideo.srcObject = event.streams[0];
-                    log(`✅ Remote stream attached to video element`, 'success');
-                    
-                    // Ensure video plays (handle autoplay restrictions)
+
+                if (event.streams && event.streams.length > 0) {
+                    // Standard case (web broadcaster): both tracks arrive in same stream object
+                    if (remoteVideo.srcObject !== event.streams[0]) {
+                        remoteVideo.srcObject = event.streams[0];
+                        log('✅ Remote stream attached to video element', 'success');
+                    }
+                } else {
+                    // Android unified plan: each track arrives without a stream bundle
+                    // Build the stream manually from individual tracks
+                    if (!remoteVideo.srcObject) {
+                        remoteVideo.srcObject = new MediaStream();
+                        log('✅ Remote stream attached to video element', 'success');
+                    }
+                    const existing = remoteVideo.srcObject;
+                    if (!existing.getTracks().includes(event.track)) {
+                        existing.addTrack(event.track);
+                    }
+                }
+
+                // Only call play() when actually paused — avoids the double-play abort
+                if (remoteVideo.paused && remoteVideo.srcObject) {
                     remoteVideo.play().catch(err => {
                         log(`⚠️ Autoplay prevented: ${err.message}. Click video to play.`, 'error');
                     });
@@ -661,10 +700,12 @@
             // Handle ICE candidates
             peerConnection.onicecandidate = (event) => {
                 if (event.candidate && websocket) {
+                    // Send flat fields — server expects flat format
                     websocket.send(JSON.stringify({
                         type: 'ice_candidate',
-                        candidate: event.candidate,
-                        sender_id: viewerId  // Include our viewer ID
+                        candidate: event.candidate.candidate,
+                        sdpMid: event.candidate.sdpMid,
+                        sdpMLineIndex: event.candidate.sdpMLineIndex
                     }));
                     log(`📤 Sent ICE candidate`);
                 }
@@ -696,13 +737,13 @@
                 });
                 await peerConnection.setLocalDescription(offer);
                 
+                // Send flat sdp — server expects flat format
                 websocket.send(JSON.stringify({
                     type: 'offer',
-                    offer: offer,
-                    sender_id: viewerId  // Include our viewer ID
+                    sdp: offer.sdp
                 }));
-                
-                log(`📤 Sent offer to broadcaster (sender_id: ${viewerId})`);
+
+                log(`📤 Sent offer to broadcaster`);
             } catch (error) {
                 log(`❌ Error creating offer: ${error.message}`, 'error');
             }
@@ -721,19 +762,48 @@
             }
             else if (data.type === 'answer') {
                 try {
-                    await peerConnection.setRemoteDescription(data.answer);
+                    // Server relays flat sdp field
+                    const sdp = (data.answer && data.answer.sdp) ? data.answer.sdp : data.sdp;
+                    await peerConnection.setRemoteDescription(
+                        new RTCSessionDescription({ type: 'answer', sdp: sdp })
+                    );
                     log('✅ Answer received from broadcaster!', 'success');
+                    // Drain any buffered ICE candidates
+                    if (pendingIceCandidates.length) {
+                        log(`🧊 Draining ${pendingIceCandidates.length} buffered ICE candidate(s)`);
+                        for (const c of pendingIceCandidates) {
+                            await peerConnection.addIceCandidate(c).catch(() => {});
+                        }
+                        pendingIceCandidates.length = 0;
+                    }
+                    remoteDescSet = true;
                 } catch (error) {
                     log(`❌ Error setting remote description: ${error.message}`, 'error');
                 }
             }
             else if (data.type === 'ice_candidate') {
-                if (peerConnection && data.candidate) {
-                    try {
-                        await peerConnection.addIceCandidate(data.candidate);
+                // Server sends flat fields OR nested candidate object — handle both
+                const candidateStr = (data.candidate && typeof data.candidate === 'object')
+                    ? data.candidate.candidate : data.candidate;
+                const sdpMid = (data.candidate && typeof data.candidate === 'object')
+                    ? data.candidate.sdpMid : data.sdpMid;
+                const sdpMLineIndex = (data.candidate && typeof data.candidate === 'object')
+                    ? data.candidate.sdpMLineIndex : data.sdpMLineIndex;
+
+                if (candidateStr) {
+                    const iceCandidate = new RTCIceCandidate({
+                        candidate: candidateStr,
+                        sdpMid: sdpMid,
+                        sdpMLineIndex: sdpMLineIndex
+                    });
+                    if (remoteDescSet && peerConnection) {
+                        await peerConnection.addIceCandidate(iceCandidate).catch(e =>
+                            log(`❌ Error adding ICE candidate: ${e.message}`, 'error')
+                        );
                         log('✅ Added ICE candidate');
-                    } catch (error) {
-                        log(`❌ Error adding ICE candidate: ${error.message}`, 'error');
+                    } else {
+                        pendingIceCandidates.push(iceCandidate);
+                        log(`📌 Buffered ICE candidate (waiting for remote desc)`);
                     }
                 }
             }
@@ -791,6 +861,8 @@
             document.getElementById('delayBar').classList.remove('visible');
             currentDelay = 0;
             lastBroadcasterTs = 0;
+            pendingIceCandidates = [];
+            remoteDescSet = false;
             
             log('⏹️ Left stream', 'success');
         }

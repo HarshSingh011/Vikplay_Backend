@@ -552,7 +552,8 @@
         }
         
         async function handleOffer(data) {
-            const viewerId = data.sender_id;
+            const viewerId = data.sender_id
+                ?? parseInt(data.source?.split('_')[1]);
             const pc = peerConnections[viewerId];
             
             if (!pc) {
@@ -580,7 +581,8 @@
         }
         
         async function handleIceCandidate(data) {
-            const viewerId = data.sender_id;
+            const viewerId = data.sender_id
+                ?? parseInt(data.source?.split('_')[1]);
             const pc = peerConnections[viewerId];
             
             if (pc && data.candidate) {
