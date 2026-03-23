@@ -7,8 +7,9 @@ import re
 EMAIL_REGEX = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
 
 # Password regex pattern
-# Must contain: uppercase, lowercase, digit, and be at least 8 characters
-PASSWORD_REGEX = r'^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)[A-Za-z\d@$!%*?&]{8,}$'
+# Must contain: uppercase, lowercase, digit, special character, and be at least 8 characters
+# Special characters allowed: @$!%*?&
+PASSWORD_REGEX = r'^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$'
 
 # Username regex pattern
 # Allow letters, numbers, underscore, hyphen, dot (3-50 characters)
@@ -28,7 +29,7 @@ def validate_password_regex(password: str) -> bool:
     - At least one uppercase letter
     - At least one lowercase letter
     - At least one digit
-    - Can contain letters, digits, and special chars: @$!%*?&
+    - At least one special character: @$!%*?&
     """
     return bool(re.match(PASSWORD_REGEX, password))
 
