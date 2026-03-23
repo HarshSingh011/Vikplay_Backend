@@ -23,13 +23,13 @@ class UserCreate(UserBase):
         ..., 
         min_length=8,
         example="SecurePass123!",
-        description="Password (min 8 chars, must contain uppercase, lowercase, digit)"
+        description="Password (min 8 chars, must contain uppercase, lowercase, digit, and special character)"
     )
     
     @validator('password')
     def validate_password(cls, v):
         if not validate_password_regex(v):
-            raise ValueError('Password must be at least 8 characters long and contain uppercase, lowercase, and digit')
+            raise ValueError('Password must be at least 8 characters long and contain uppercase, lowercase, digit, and special character (@$!%*?&)')
         return v
     
     @validator('username')
@@ -96,7 +96,7 @@ class EmailVerify(BaseModel):
 
 class PasswordReset(BaseModel):
     email: str = Field(..., example="john@example.com", description="Email address")
-    new_password: str = Field(..., example="NewSecurePass123!", description="New password (min 8 chars, uppercase, lowercase, digit)")
+    new_password: str = Field(..., example="NewSecurePass123!", description="New password (min 8 chars, uppercase, lowercase, digit, special character)")
     confirm_password: str = Field(..., example="NewSecurePass123!", description="Confirm new password")
     
     @validator('email')
@@ -108,7 +108,7 @@ class PasswordReset(BaseModel):
     @validator('new_password')
     def validate_new_password(cls, v):
         if not validate_password_regex(v):
-            raise ValueError('Password must be at least 8 characters long and contain uppercase, lowercase, and digit')
+            raise ValueError('Password must be at least 8 characters long and contain uppercase, lowercase, digit, and special character (@$!%*?&)')
         return v
     
     @validator('confirm_password')
