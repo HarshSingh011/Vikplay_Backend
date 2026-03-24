@@ -33,11 +33,10 @@ async def forgot_password(email_data: EmailVerify, background_tasks: BackgroundT
         # Check if user exists
         user = db.query(User).filter(User.email == email_data.email).first()
         if not user:
-            # For security, return generic message but log the attempt
             logger.warning(f"Password reset attempted for non-existent email: {email_data.email}")
-            return MessageResponse(
-                message="If the email exists, you will receive a password reset OTP.",
-                success=True
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="User does not exist"
             )
         
         # Clean up any existing OTP for this email and type
@@ -71,6 +70,8 @@ async def forgot_password(email_data: EmailVerify, background_tasks: BackgroundT
             success=True
         )
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Forgot password error: {str(e)}")
         raise HTTPException(
