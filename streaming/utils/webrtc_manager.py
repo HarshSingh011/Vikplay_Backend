@@ -3,6 +3,7 @@ from typing import Dict, Optional, Set
 import json
 import logging
 from datetime import datetime
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -297,23 +298,33 @@ class WebRTCManager:
             "username": username,
             "message": message,
             "role": role,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": int(time.time() * 1000)  # Unix timestamp in milliseconds for cross-platform compatibility
         }
 
+        logger.info(f"📢 Broadcasting chat message in stream {stream_code}: from {username} (role={role}), total viewers={len(self.viewers.get(stream_code, []))}")
+
+        # Send to broadcaster
         if stream_code in self.broadcasters:
             try:
                 await self.broadcasters[stream_code].websocket.send_json(chat_data)
+                logger.info(f"✅ Chat message sent to broadcaster in stream {stream_code}")
             except Exception as e:
-                logger.error(f"Error sending chat to broadcaster: {e}")
+                logger.error(f"❌ Error sending chat to broadcaster: {e}")
 
+        # Send to all viewers
         if stream_code in self.viewers:
             disconnected = set()
+            viewer_count = len(self.viewers[stream_code])
+            logger.info(f"📤 Sending chat message to {viewer_count} viewer(s) in stream {stream_code}")
+            
             for viewer in self.viewers[stream_code]:
                 try:
                     await viewer.websocket.send_json(chat_data)
+                    logger.info(f"✅ Chat message sent to viewer user_id={viewer.user_id}")
                 except Exception as e:
-                    logger.error(f"Error sending chat to viewer: {e}")
+                    logger.error(f"❌ Error sending chat to viewer user_id={viewer.user_id}: {e}")
                     disconnected.add(viewer)
+            
             for viewer in disconnected:
                 self.disconnect(viewer.websocket)
 
