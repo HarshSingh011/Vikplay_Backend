@@ -680,7 +680,18 @@
             if (isSelf) cls += ' self';
             if (role === 'broadcaster') cls += ' broadcaster-msg';
             div.className = cls;
-            const time = timestamp ? new Date(timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
+            
+            // Handle both Unix timestamp (ms) and ISO string formats
+            let dateObj;
+            if (typeof timestamp === 'number') {
+                dateObj = new Date(timestamp);  // Unix timestamp in milliseconds
+            } else if (timestamp) {
+                dateObj = new Date(timestamp);  // ISO string or other formats
+            } else {
+                dateObj = new Date();
+            }
+            const time = dateObj.toLocaleTimeString();
+            
             const badgeCls = role === 'broadcaster' ? 'badge-broadcaster' : 'badge-viewer';
             const badgeLabel = role === 'broadcaster' ? 'HOST' : escapeHtml(username);
             div.innerHTML = `<span class="chat-time">${time}</span><span class="chat-role-badge ${badgeCls}">${badgeLabel}</span><span class="chat-user">${role === 'broadcaster' ? escapeHtml(username) + ':' : ''}</span> ${escapeHtml(message)}`;

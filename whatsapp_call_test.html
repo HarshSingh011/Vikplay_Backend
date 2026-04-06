@@ -315,6 +315,37 @@
 </div>
 
 <script>
+/* ═══════════ CONFIG ═══════════ */
+// Auto-detect environment
+const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+const isDevelopment = isLocalhost || window.location.hostname.includes('local');
+
+// Configuration - change these to switch environments
+const CONFIG = {
+    // Set to 'local' for local development or 'production' for production
+    environment: isDevelopment ? 'local' : 'production',
+    
+    // API URLs
+    local: {
+        http: 'http://localhost:8000',
+        ws: 'ws://localhost:8000'
+    },
+    production: {
+        http: 'https://vikplay-backend.onrender.com',
+        ws: 'wss://vikplay-backend.onrender.com'
+    }
+};
+
+// Get current environment config
+const envConfig = CONFIG[CONFIG.environment];
+const API_BASE_URL = envConfig.http;
+const WS_BASE_URL = envConfig.ws;
+
+// Log environment on page load
+console.log(`%c[ENVIRONMENT] ${CONFIG.environment.toUpperCase()}`, `color: ${CONFIG.environment === 'production' ? 'red' : 'green'}; font-weight: bold;`);
+console.log(`API URL: ${API_BASE_URL}`);
+console.log(`WebSocket URL: ${WS_BASE_URL}`);
+
 /* ═══════════ STATE ═══════════ */
 let ws = null;
 let localStream = null;
@@ -421,8 +452,8 @@ async function connect() {
         currentUser = { id: String(payload.user_id || payload.sub), sub: payload.sub };
 
         if (ws) { ws.onclose = null; ws.close(); }
-        // Using local WebSocket URL for local development
-        ws = new WebSocket(`ws://localhost:8000/calls/ws?token=${encodeURIComponent(token)}`);
+        // Use appropriate protocol based on environment
+        ws = new WebSocket(`${WS_BASE_URL}/calls/ws?token=${encodeURIComponent(token)}`);
 
         ws.onopen = () => {
             addLog('ws', '✅ WebSocket connected', `User: ${payload.sub}`);
@@ -474,14 +505,14 @@ async function loadUsers(token) {
     document.getElementById('userList').innerHTML = '<div class="empty-msg">Loading...</div>';
     try {
         // First, get current user info for debugging
-        const meResp = await fetch('/calls/me', { headers: { Authorization: 'Bearer ' + token } });
+        const meResp = await fetch(`${API_BASE_URL}/calls/me`, { headers: { Authorization: 'Bearer ' + token } });
         if (meResp.ok) {
             const meData = await meResp.json();
             addLog('info', `👤 Your ID: ${meData.id}`, `Email: ${meData.email}`);
         }
         
         // Then load user list
-        const r = await fetch('/calls/users/search', { headers: { Authorization: 'Bearer ' + token } });
+        const r = await fetch(`${API_BASE_URL}/calls/users/search`, { headers: { Authorization: 'Bearer ' + token } });
         if (!r.ok) throw new Error('HTTP ' + r.status);
         allUsers = await r.json();
         renderUsers(allUsers);
@@ -551,7 +582,7 @@ function debouncedSearch() {
         const token = document.getElementById('jwtToken').value.trim();
         if (!token) return;
         try {
-            const r = await fetch('/calls/users/search?query=' + encodeURIComponent(q), { headers: { Authorization: 'Bearer ' + token } });
+            const r = await fetch(`${API_BASE_URL}/calls/users/search?query=` + encodeURIComponent(q), { headers: { Authorization: 'Bearer ' + token } });
             if (r.ok) renderUsers(await r.json());
         } catch {}
     }, 350);
@@ -574,7 +605,7 @@ async function callUser(userId, username) {
 
     const token = document.getElementById('jwtToken').value.trim();
     try {
-        const r = await fetch('/calls/call-user/' + userId, {
+        const r = await fetch(`${API_BASE_URL}/calls/call-user/` + userId, {
             method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }
         });
         if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -603,7 +634,7 @@ async function startGroupCall() {
 
     const token = document.getElementById('jwtToken').value.trim();
     try {
-        const r = await fetch('/calls/group-call', {
+        const r = await fetch(`${API_BASE_URL}/calls/group-call`, {
             method: 'POST',
             headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
             body: JSON.stringify({ user_ids: ids })
@@ -1023,7 +1054,7 @@ function debouncedPickerSearch(q) {
         const token = document.getElementById('jwtToken').value.trim();
         if (!token) return;
         try {
-            const r = await fetch('/calls/users/search?query=' + encodeURIComponent(q), { headers: { Authorization: 'Bearer ' + token } });
+            const r = await fetch(`${API_BASE_URL}/calls/users/search?query=` + encodeURIComponent(q), { headers: { Authorization: 'Bearer ' + token } });
             if (r.ok) renderPickerList(await r.json());
         } catch {}
     }, 350);
@@ -1070,7 +1101,7 @@ async function addPersonToCall(userId, username, btn) {
     btn.disabled = true; btn.textContent = 'Adding...';
     const token = document.getElementById('jwtToken').value.trim();
     try {
-        const r = await fetch(`/calls/${currentCallId}/add-user/${userId}`, {
+        const r = await fetch(`${API_BASE_URL}/calls/${currentCallId}/add-user/${userId}`, {
             method: 'POST',
             headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }
         });
@@ -1134,7 +1165,7 @@ async function addContactFromForm() {
     btn.textContent = 'Adding...';
     
     try {
-        const r = await fetch('/calls/contacts/add', {
+        const r = await fetch(`${API_BASE_URL}/calls/contacts/add`, {
             method: 'POST',
             headers: { 
                 Authorization: 'Bearer ' + token, 
@@ -1186,7 +1217,7 @@ async function loadContactsList() {
     }
     
     try {
-        const r = await fetch('/calls/contacts', {
+        const r = await fetch(`${API_BASE_URL}/calls/contacts`, {
             headers: { Authorization: 'Bearer ' + token }
         });
         
@@ -1278,7 +1309,7 @@ async function deleteContact(contactId, nickname) {
     if (!token) return;
     
     try {
-        const r = await fetch(`/calls/contacts/${contactId}`, {
+        const r = await fetch(`${API_BASE_URL}/calls/contacts/${contactId}`, {
             method: 'DELETE',
             headers: { Authorization: 'Bearer ' + token }
         });
